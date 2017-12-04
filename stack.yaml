@@ -2,6 +2,5 @@ flags: {}
 extra-package-dbs: []
 packages:
 - '.'
-extra-deps:
-- Win32-2.6.1.0 # TODO: why do I need this? without it I get an older version
+extra-deps: []
 resolver: lts-9.14
