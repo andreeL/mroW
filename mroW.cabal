@@ -29,6 +29,7 @@ executable mroW-exe
                      , mroW
                      , GLFW-b
                      , OpenGLRaw
+  other-modules:       OpenGLHelpers
   default-language:    Haskell2010
 
 test-suite mroW-test
