@@ -1,10 +1,11 @@
 module Main where
 
 import           Control.Monad
-import qualified Graphics.UI.GLFW as GLFW
+import           Data.Bits ((.|.))
+import           Data.Maybe
 import           Lib
 import           Graphics.GL
-import           Data.Bits ((.|.))
+import qualified Graphics.UI.GLFW as GLFW
 import           OpenGLHelpers
 
 errorCallback :: GLFW.ErrorCallback
@@ -30,7 +31,7 @@ main = do
             Just window -> do
                 GLFW.makeContextCurrent (Just window)
                 GLFW.setKeyCallback window (Just keyCallback)
-                GLFW.swapInterval 1 -- assuming this enables vsync
+                GLFW.swapInterval 1 -- assuming this enables vsync (doesn't work on my machine)
                 dummyVAO <- createVAO
                 emptyBO <- createEmptyBO 0
                 mainProgram <- createProgram "shaders/Fullscreen_vert.glsl" "shaders/Main_frag.glsl"
@@ -44,12 +45,12 @@ runLoop dummyVAO emptyBO mainProgram window = do
     case windowShouldClose of
         True -> return ()
         False -> do
-            -- update state ?
-            -- handle input ?
             maybeTime <- GLFW.getTime
-            case maybeTime of
-                Nothing -> return ()
-                Just time -> return () -- update the scene or something here...
+            let time = fromMaybe 0 maybeTime
+
+            -- handle input ?
+
+            -- update state ?
 
             -- pre render
             (width, height) <- GLFW.getFramebufferSize window
@@ -63,6 +64,7 @@ runLoop dummyVAO emptyBO mainProgram window = do
             glBindVertexArray dummyVAO
             glBindVertexBuffer 0 emptyBO 0 0
             glUseProgram mainProgram
+            setFloat mainProgram "fTime" Nothing (realToFrac time)
             glDrawArrays GL_TRIANGLES 0 3
 
             -- post render

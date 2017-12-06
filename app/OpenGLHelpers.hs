@@ -7,7 +7,8 @@ module OpenGLHelpers (
     createProgram,
     deleteProgram,
     createEmptyBO,
-    createVAO
+    createVAO,
+    setFloat
 ) where
 
 #define CHECK_GL (checkForGlError __FILE__ __LINE__) $
@@ -52,7 +53,18 @@ createVAO = do
     id <- alloca $ \ptr -> glGenVertexArrays 1 ptr >> peek ptr
     glBindVertexArray id
     return id
- 
+
+getUniformLocation :: GLuint -> String -> IO (GLint)
+getUniformLocation programObjectId variableName = do
+    CHECK_GL withCString variableName $ glGetUniformLocation programObjectId
+
+setFloat :: GLuint -> String -> Maybe GLint -> GLfloat -> IO (GLint)
+setFloat programObjectId name maybeCachedLocation value = do
+    loc <- case maybeCachedLocation of
+        Just cachedLocation -> return cachedLocation
+        Nothing             -> getUniformLocation programObjectId name
+    CHECK_GL glUniform1f loc value
+    return loc
 
 -- private stuff
 logString :: (Show b) => String -> Maybe b -> IO () 
