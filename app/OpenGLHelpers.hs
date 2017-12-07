@@ -8,7 +8,8 @@ module OpenGLHelpers (
     deleteProgram,
     createEmptyBO,
     createVAO,
-    setFloat
+    setFloat,
+    setFloat2
 ) where
 
 #define CHECK_GL (checkForGlError __FILE__ __LINE__) $
@@ -54,17 +55,19 @@ createVAO = do
     glBindVertexArray id
     return id
 
-getUniformLocation :: GLuint -> String -> IO (GLint)
-getUniformLocation programObjectId variableName = do
-    CHECK_GL withCString variableName $ glGetUniformLocation programObjectId
+withUniformLocation :: GLuint -> String -> Maybe GLint -> (GLint -> IO()) -> IO (GLint)
+withUniformLocation oId name mLoc action = do
+    loc <- case mLoc of
+        Just cachedLoc -> return cachedLoc
+        Nothing        -> CHECK_GL withCString name $ glGetUniformLocation oId
+    action loc
+    return loc
 
 setFloat :: GLuint -> String -> Maybe GLint -> GLfloat -> IO (GLint)
-setFloat programObjectId name maybeCachedLocation value = do
-    loc <- case maybeCachedLocation of
-        Just cachedLocation -> return cachedLocation
-        Nothing             -> getUniformLocation programObjectId name
-    CHECK_GL glUniform1f loc value
-    return loc
+setFloat oId name mLoc x = withUniformLocation oId name mLoc (\loc -> glUniform1f loc x)
+
+setFloat2 :: GLuint -> String -> Maybe GLint -> GLfloat -> GLfloat -> IO (GLint)
+setFloat2 oId name mLoc x y = withUniformLocation oId name mLoc (\loc -> glUniform2f loc x y)
 
 -- private stuff
 logString :: (Show b) => String -> Maybe b -> IO () 
