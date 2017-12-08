@@ -2,7 +2,6 @@
 
 varying vec2 screenUV;
 varying vec2 screenXY;
-
 uniform float fTime = 0;
 uniform vec2 fMouse = ivec2(0, 0);
 

@@ -8,8 +8,11 @@ module OpenGLHelpers (
     deleteProgram,
     createEmptyBO,
     createVAO,
+    setInt,
     setFloat,
-    setFloat2
+    setFloat2,
+    createSceneTargetTexture,
+    createSceneTargetBuffer
 ) where
 
 #define CHECK_GL (checkForGlError __FILE__ __LINE__) $
@@ -63,11 +66,38 @@ withUniformLocation oId name mLoc action = do
     action loc
     return loc
 
+setInt :: GLuint -> String -> Maybe GLint -> GLint -> IO (GLint)
+setInt oId name mLoc x = withUniformLocation oId name mLoc (\loc -> glUniform1i loc x)
+
 setFloat :: GLuint -> String -> Maybe GLint -> GLfloat -> IO (GLint)
 setFloat oId name mLoc x = withUniformLocation oId name mLoc (\loc -> glUniform1f loc x)
 
 setFloat2 :: GLuint -> String -> Maybe GLint -> GLfloat -> GLfloat -> IO (GLint)
 setFloat2 oId name mLoc x y = withUniformLocation oId name mLoc (\loc -> glUniform2f loc x y)
+
+createSceneTargetTexture :: GLsizei -> GLsizei -> IO (GLuint)
+createSceneTargetTexture width height = do
+    glActiveTexture GL_TEXTURE0
+    textureId <- alloca $ \ptr -> glGenVertexArrays 1 ptr >> peek ptr
+    glBindTexture GL_TEXTURE_2D textureId
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T (fromIntegral GL_REPEAT)
+    CHECK_GL glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGB16F) width height 0 GL_RGB GL_FLOAT nullPtr
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_BASE_LEVEL 0
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAX_LEVEL  0
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER (fromIntegral GL_LINEAR)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER (fromIntegral GL_LINEAR)
+    return textureId
+
+createSceneTargetBuffer :: GLuint -> IO GLuint
+createSceneTargetBuffer textureId = do
+    bufferPointer <- malloc :: IO (Ptr GLuint)
+    glGenFramebuffers 1 bufferPointer
+    frameBufferId <- peek bufferPointer
+    glBindFramebuffer GL_FRAMEBUFFER frameBufferId
+    glFramebufferTexture2D GL_FRAMEBUFFER GL_COLOR_ATTACHMENT0 GL_TEXTURE_2D textureId 0
+    glBindFramebuffer GL_FRAMEBUFFER 0
+    return frameBufferId
 
 -- private stuff
 logString :: (Show b) => String -> Maybe b -> IO () 
