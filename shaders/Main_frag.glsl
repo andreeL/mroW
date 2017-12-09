@@ -5,12 +5,6 @@ varying vec2 screenXY;
 uniform float fTime = 0;
 uniform vec2 fMouse = ivec2(0, 0);
 
-void stripes()
-{
-    float stripe = pow(abs(sin(screenUV.x * 100.0 - 20.0 * screenUV.y + fTime * 10.0)), 16.0);
-    gl_FragColor = vec4(screenUV, stripe, 1.0);
-}
-
 void getRay(in vec2 uv, out vec3 start, out vec3 direction)
 {
     float angleX = -fMouse.x / 100.0;
@@ -25,7 +19,7 @@ void getRay(in vec2 uv, out vec3 start, out vec3 direction)
     direction = mat3(xAxis, yAxis, zAxis) * normalize(vec3(uv, 1.0));
 }
 
-void scene()
+void main()
 {
     vec3 start;
     vec3 direction;
@@ -64,9 +58,4 @@ void scene()
     float light = clamp(dot(lightDirection, dist.xyz), 0.0, 1.0) + 0.2;
 
 	gl_FragColor = vec4(materialColor * (light * fog),1.0);
-}
-
-void main()
-{
-    scene();
 }

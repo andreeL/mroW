@@ -56,7 +56,12 @@ main = do
                 progGLState <- createGLState
 
                 -- TODO: we probably want some proper event system
-                GLFW.setKeyCallback window (Just keyCallback)
+                -- these callbacks are just put here temporarily...
+                GLFW.setKeyCallback window (Just $ \window key scancode action mods -> do
+                    when (key == GLFW.Key'Escape) $
+                        GLFW.setWindowShouldClose window True
+                    )
+
                 GLFW.setCursorPosCallback window (Just $ \win x y -> do
                     let program = sceneProgram progGLState
                     glUseProgram program
@@ -115,14 +120,3 @@ runLoop progGLState@GLState{..} window = do
             -- post render
             GLFW.swapBuffers window
             runLoop progGLState window
-
-renderFullScreenQuad :: IO ()
-renderFullScreenQuad = undefined
-
-keyCallback :: GLFW.KeyCallback
-keyCallback window key scancode action mods = do
-    when (key == GLFW.Key'Escape) $
-        GLFW.setWindowShouldClose window True
-
-    -- printing key input for testing
-    putStrLn $ show key ++ " - " ++ show scancode ++ " - " ++ show action ++ " - " ++ show mods
