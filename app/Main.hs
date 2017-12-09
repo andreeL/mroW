@@ -29,8 +29,8 @@ data GLState = GLState {
     sceneTargetSize :: (GLsizei, GLsizei),
     sceneTargetTexture :: GLuint,
     sceneTargetBuffer :: GLuint,
-    sceneProgram :: GLuint,
-    postProcessingProgram :: GLuint
+    sceneProgram :: GLSLProgram,
+    postProcessingProgram :: GLSLProgram
     }
 
 createGLState :: IO GLState
@@ -40,8 +40,8 @@ createGLState = do
     let sceneTargetSize = (960, 540)
     sceneTargetTexture <- createSceneTargetTexture (fst sceneTargetSize) (snd sceneTargetSize)
     sceneTargetBuffer <- createSceneTargetBuffer sceneTargetTexture
-    sceneProgram <- createProgram "shaders/Fullscreen_vert.glsl" "shaders/Main_frag.glsl"
-    postProcessingProgram <- createProgram "shaders/Fullscreen_vert.glsl" "shaders/PostProcessing_frag.glsl"
+    sceneProgram <- createGLSLProgram "shaders/Fullscreen_vert.glsl" "shaders/Main_frag.glsl"
+    postProcessingProgram <- createGLSLProgram "shaders/Fullscreen_vert.glsl" "shaders/PostProcessing_frag.glsl"
     return GLState{..}
 
 main :: IO ()
@@ -63,9 +63,9 @@ main = do
                     )
 
                 GLFW.setCursorPosCallback window (Just $ \win x y -> do
-                    let program = sceneProgram progGLState
-                    glUseProgram program
-                    setFloat2 program "fMouse" Nothing (realToFrac x) (realToFrac y)
+                    let sceneProgramId = getProgramId . sceneProgram $ progGLState
+                    glUseProgram sceneProgramId
+                    setFloat2 sceneProgramId "fMouse" Nothing (realToFrac x) (realToFrac y)
                     return ()
                     )
 
@@ -90,33 +90,33 @@ runLoop progGLState@GLState{..} window = do
             (width, height) <- GLFW.getFramebufferSize window
             let aspectRatio = fromIntegral width / fromIntegral height
             let fov = if aspectRatio > 1.0 then (aspectRatio, 1.0) else (1.0, 1 / aspectRatio)
-            glDisable GL_DEPTH_TEST
+            let withFullscreenGLSLProgram targetBuffer (width, height) program setupAction = do
+                    -- for now we just treat the VAO as a GL requirement, and ignore it
+                    glBindVertexArray dummyVAO
+                    glBindVertexBuffer 0 emptyBO 0 0
 
-            -- for now we just treat the VAO as a GL requirement, and ignore it
-            glBindVertexArray dummyVAO
-            glBindVertexBuffer 0 emptyBO 0 0
+                    glBindFramebuffer GL_FRAMEBUFFER targetBuffer
+                    glDisable GL_DEPTH_TEST
+                    glViewport 0 0 width height
 
-            let setGenericShaderUniforms program = do
-                    setFloat program "fTime" Nothing (realToFrac time)
-                    setFloat2 program "fFov" Nothing (fst fov) (snd fov)
+                    let programId = getProgramId program
+                    glUseProgram programId
+                    setFloat programId "fTime" Nothing (realToFrac time)
+                    setFloat2 programId "fFov" Nothing (fst fov) (snd fov)
+                    setupAction programId
+                    glDrawArrays GL_TRIANGLES 0 3
 
             -- render scene
-            glBindFramebuffer GL_FRAMEBUFFER sceneTargetBuffer
-            glViewport 0 0 (fst sceneTargetSize) (snd sceneTargetSize)
-            glUseProgram sceneProgram
-            setGenericShaderUniforms sceneProgram
-            glDrawArrays GL_TRIANGLES 0 3
+            withFullscreenGLSLProgram sceneTargetBuffer sceneTargetSize sceneProgram $ \programId -> do
+                return ()
 
             -- copy scene to main buffer with post processing
-            glBindFramebuffer GL_FRAMEBUFFER 0
-            glViewport 0 0 (fromIntegral width) (fromIntegral height)
-            glUseProgram postProcessingProgram
-            setGenericShaderUniforms postProcessingProgram
-            setInt postProcessingProgram "sceneTexture" Nothing 0
-            glActiveTexture GL_TEXTURE0
-            glBindTexture GL_TEXTURE_2D sceneTargetTexture
-            glDrawArrays GL_TRIANGLES 0 3
-            
+            withFullscreenGLSLProgram 0 (fromIntegral width, fromIntegral height) postProcessingProgram $ \programId -> do
+                glActiveTexture GL_TEXTURE0
+                glBindTexture GL_TEXTURE_2D sceneTargetTexture
+                setInt programId "sceneTexture" Nothing 0
+                setFloat2 programId "fMouse" Nothing 0 0
+
             -- post render
             GLFW.swapBuffers window
             runLoop progGLState window

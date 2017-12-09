@@ -1,11 +1,14 @@
 {-# LANGUAGE CPP #-}
+#define CHECK_GL (checkForGlError __FILE__ __LINE__) $
 -- This module will do for now! But later, when the project grows,
 -- this stuff might be replaced by some high level OpenGL lib instead!
 --
 -- Just some basic stuff to get us started...
 module OpenGLHelpers (
-    createProgram,
-    deleteProgram,
+    GLSLProgram,
+    createGLSLProgram,
+    getProgramId,
+    deleteGLSLProgram,
     createEmptyBO,
     createVAO,
     setInt,
@@ -15,12 +18,17 @@ module OpenGLHelpers (
     createSceneTargetBuffer
 ) where
 
-#define CHECK_GL (checkForGlError __FILE__ __LINE__) $
 import Control.Monad (forM_, when)
 import Foreign
 import Foreign.C.String
 import Graphics.GL
 import System.IO (hFlush, stdout)
+
+data GLSLProgram = GLSLProgram {
+    vertexShaderId :: GLuint,
+    fragmentShaderId :: GLuint,
+    programId :: GLuint
+    }
 
 checkForGlError :: String -> Int -> IO a -> IO a
 checkForGlError file line action = do
@@ -33,16 +41,19 @@ checkForGlError file line action = do
             glError' <- glGetError
             when (glError' /= 0) $ logString "OpenGL" (Just $ "Error " ++ show glError' ++ " " ++ placement ++ " @" ++ file ++ ":" ++ show line)
 
-createProgram :: FilePath -> FilePath -> IO (GLuint)
-createProgram vertexShaderSource fragmentShaderSource = do
+createGLSLProgram :: FilePath -> FilePath -> IO (GLSLProgram)
+createGLSLProgram vertexShaderSource fragmentShaderSource = do
     vertexShader   <- createShader GL_VERTEX_SHADER vertexShaderSource
     fragmentShader <- createShader GL_FRAGMENT_SHADER fragmentShaderSource
     program        <- compileProgram [vertexShader, fragmentShader]
     -- TODO!!! when do we delete the shaders?
-    return program
+    return $ GLSLProgram vertexShader fragmentShader program
 
-deleteProgram :: GLuint -> IO ()
-deleteProgram = undefined -- TODO
+getProgramId :: GLSLProgram -> GLuint
+getProgramId = programId
+
+deleteGLSLProgram :: GLSLProgram -> IO ()
+deleteGLSLProgram = undefined -- TODO
 
 createEmptyBO :: GLsizei -> IO GLuint
 createEmptyBO noOfBytes = do
