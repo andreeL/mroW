@@ -72,8 +72,9 @@ main = do
                 -- TODO: we probably want some proper event system
                 -- these callbacks are just put here temporarily...
                 GLFW.setKeyCallback window (Just $ \window key scancode action mods -> do
-                    when (key == GLFW.Key'Escape) $ GLFW.setWindowShouldClose window True
-                    when (key == GLFW.Key'F1) $ recreateGLSLPrograms progGLState
+                    when (action == GLFW.KeyState'Pressed) $ do
+                        when (key == GLFW.Key'Escape) $ GLFW.setWindowShouldClose window True
+                        when (key == GLFW.Key'F1) $ recreateGLSLPrograms progGLState
                     )
 
                 GLFW.setCursorPosCallback window (Just $ \win x y -> do
