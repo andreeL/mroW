@@ -8,6 +8,7 @@ import           Lib
 import           Graphics.GL
 import qualified Graphics.UI.GLFW as GLFW
 import           OpenGLHelpers
+import qualified Control.Exception
 
 errorCallback :: GLFW.ErrorCallback
 errorCallback error description = do
@@ -33,21 +34,34 @@ data GLState = GLState {
     postProcessingProgram :: GLSLProgram
     }
 
+sceneProgramSource = ("shaders/Fullscreen_vert.glsl", "shaders/Main_frag.glsl") :: (FilePath, FilePath)
+postProcessingProgramSource = ("shaders/Fullscreen_vert.glsl", "shaders/PostProcessing_frag.glsl") :: (FilePath, FilePath)
+defaultWindowSize = (960, 540) :: (GLsizei, GLsizei)
+
 createGLState :: IO GLState
 createGLState = do
     dummyVAO <- createVAO
     emptyBO <- createEmptyBO 0
-    let sceneTargetSize = (960, 540)
+    let sceneTargetSize = defaultWindowSize
     sceneTargetTexture <- createSceneTargetTexture (fst sceneTargetSize) (snd sceneTargetSize)
     sceneTargetBuffer <- createSceneTargetBuffer sceneTargetTexture
-    sceneProgram <- createGLSLProgram "shaders/Fullscreen_vert.glsl" "shaders/Main_frag.glsl"
-    postProcessingProgram <- createGLSLProgram "shaders/Fullscreen_vert.glsl" "shaders/PostProcessing_frag.glsl"
+    sceneProgram <- createGLSLProgram sceneProgramSource
+    postProcessingProgram <- createGLSLProgram postProcessingProgramSource
     return GLState{..}
+
+recreateGLSLPrograms :: GLState -> IO ()
+recreateGLSLPrograms GLState{..} = Control.Exception.catch (do
+        recreateGLSLProgram sceneProgram sceneProgramSource
+        recreateGLSLProgram postProcessingProgram postProcessingProgramSource
+    ) failHandler
+    where
+        failHandler :: Control.Exception.ErrorCall -> IO ()
+        failHandler _ = putStrLn $ "Failed to update all shaders!"
 
 main :: IO ()
 main = do
     withGLFW $ do
-        maybeWindow <- GLFW.createWindow 960 540 "mroW" Nothing Nothing
+        maybeWindow <- GLFW.createWindow (fromIntegral.fst $ defaultWindowSize) (fromIntegral.snd $ defaultWindowSize) "mroW" Nothing Nothing
         case maybeWindow of
             Nothing -> return ()
             Just window -> do
@@ -58,8 +72,8 @@ main = do
                 -- TODO: we probably want some proper event system
                 -- these callbacks are just put here temporarily...
                 GLFW.setKeyCallback window (Just $ \window key scancode action mods -> do
-                    when (key == GLFW.Key'Escape) $
-                        GLFW.setWindowShouldClose window True
+                    when (key == GLFW.Key'Escape) $ GLFW.setWindowShouldClose window True
+                    when (key == GLFW.Key'F1) $ recreateGLSLPrograms progGLState
                     )
 
                 GLFW.setCursorPosCallback window (Just $ \win x y -> do
