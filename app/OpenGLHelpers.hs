@@ -153,7 +153,7 @@ buildShader shaderId filename = do
                         logMessagePointer <- mallocArray (fromIntegral logLength) :: IO (Ptr GLchar)
                         CHECK_GL glGetShaderInfoLog shaderId logLength nullPtr logMessagePointer
                         logMessage <- peekCString logMessagePointer
-                        logString filename (Just logMessage)
+                        logString' $ filename ++ " - " ++ logMessage
                         error $ "Failed to compile shader " ++ filename ++ "\n"
 
 linkProgram :: GLuint -> IO ()
@@ -169,5 +169,5 @@ linkProgram programId = do
             logMessagePointer <- mallocArray (fromIntegral logLength) :: IO (Ptr GLchar)
             CHECK_GL glGetProgramInfoLog programId logLength nullPtr logMessagePointer
             logMessage <- peekCString logMessagePointer
-            logString "link" (Just logMessage)
+            logString' $ "linking - " ++ logMessage
             error $ "Failed to link program\n"
