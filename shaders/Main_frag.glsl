@@ -79,7 +79,7 @@ void getMaterial(in vec3 position, out vec3 normal, out vec3 albedo, out float r
     {
         normal = normalize(scene.closestSpherePosition);
         albedo = vec3(1, 0, 0);
-        roughness = 0.5;
+        roughness = 0.25;
         metallic = 1;
     } else
     {
@@ -87,7 +87,7 @@ void getMaterial(in vec3 position, out vec3 normal, out vec3 albedo, out float r
         if (closest == scene.mCubeDistance)
         {
             albedo = vec3(0, 0, 1);
-            roughness = 1;
+            roughness = 0.4;
             metallic = 0;
         } else
         {
@@ -120,7 +120,7 @@ float traceDistance(in vec3 origin, in vec3 direction)
     float t = 0.0;
     float extraMultiplier = 0.5;
     float extraStep = 0;
-    for (int i = 0; i < 150; ++i)
+    for (int i = 0; i < 100; ++i)
     {
         float distance = getDistance(origin + direction * (t + extraStep));
         if (distance < extraStep)
@@ -170,7 +170,6 @@ void main()
     getRay(screenXY, origin, direction);
 
     float distance = traceDistance(origin, direction);
-   
     vec3 worldPosition = origin + direction * distance;
     vec3 normal;
     vec3 albedo;
@@ -178,8 +177,19 @@ void main()
     float metallic;
     float ambientOcclusion;
     getMaterial(worldPosition, normal, albedo, roughness, metallic, ambientOcclusion);
-
     vec3 litColor = lit(worldPosition, origin, albedo, normal, roughness, metallic, ambientOcclusion);
+
+    // If low enough roughness we add an extra trace for reflections. TODO: refactor this to allow for arbitrary amount of reflections
+    if (roughness < 0.5)
+    {
+        vec3 newDirection = direction - 2 * dot(direction, normal) * normal;
+        vec3 newOrigin = origin + direction * (distance - epsilon * 10);
+        vec3 newWorldPosition = newOrigin + newDirection * traceDistance(newOrigin, newDirection);
+        float newRoughness;
+        getMaterial(newWorldPosition, normal, albedo, newRoughness, metallic, ambientOcclusion);
+        vec3 newLitColor = lit(newWorldPosition, origin, albedo, normal, newRoughness, metallic, ambientOcclusion);
+        litColor = mix(newLitColor, litColor, 2 * roughness);
+    }
 
     float fogAmount = min(16.0 / (1.0 + 0.5 * distance * distance), 1.0);
 	gl_FragColor = vec4(mix(vec3(0.1, 0.07, 0.03), litColor, fogAmount), 1.0);
