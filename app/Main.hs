@@ -36,7 +36,7 @@ data GLState = GLState {
 
 sceneProgramSource = ("shaders/Fullscreen_vert.glsl", "shaders/Main_frag.glsl") :: (FilePath, FilePath)
 postProcessingProgramSource = ("shaders/Fullscreen_vert.glsl", "shaders/PostProcessing_frag.glsl") :: (FilePath, FilePath)
-defaultWindowSize = (960, 540) :: (GLsizei, GLsizei)
+defaultWindowSize = (960, 540) :: (GLsizei, GLsizei) -- (1728, 1080)
 
 createGLState :: IO GLState
 createGLState = do

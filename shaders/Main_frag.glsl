@@ -6,41 +6,46 @@ uniform float fTime = 0;
 uniform vec2 fMouse = ivec2(0, 0);
 
 float epsilon = 0.005;
-float maxDistance = 20.f; // TODO: set this to something sensible
+float maxDistance = 30.f; // TODO: set this to something sensible
 
-vec4 takeClosest(in vec4 distance1, in vec4 distance2)
+float sphereRadius = 0.125 + 0.1 * sin(fTime * 3.1);
+vec3 qubeDisplacement = vec3(0.5, 0, fTime);
+vec3 qubeHalfDistance = vec3(0.125, 0.025, 0.125) * 2;
+
+struct Scene
 {
-    return (distance1.w < distance2.w) ? distance1 : distance2;
+    vec3 closestCubePosition;
+    float mCubeDistance;
+    vec3 closestSpherePosition;
+    float mSphereDistance;
+    float mCylinderDistance;
+};
+
+void getScene(in vec3 position, out Scene scene)
+{
+    scene.closestCubePosition = fract(position + qubeDisplacement) - 0.5;
+    scene.mCubeDistance = length(max(abs(scene.closestCubePosition) - qubeHalfDistance,0.0));
+
+    scene.closestSpherePosition = fract(position) - 0.5;
+    scene.mSphereDistance = length(scene.closestSpherePosition) - sphereRadius;
+
+    float cylinderExtent = 2.0;
+    scene.mCylinderDistance = cylinderExtent - length(position.xy);
 }
 
-vec4 getWorldAt(in vec3 position)
+float getMinimumDistance(in Scene scene)
 {
-    float sphereRadius = 0.125 + 0.1 * sin(fTime * 3.1);
-    vec3 qubeDisplacement = vec3(0.5, 0, fTime);
-    vec3 qubeHalfDistance = vec3(0.125, 0.025, 0.125) * 2;
-
-    vec3 closestCubePosition = fract(position + qubeDisplacement) - 0.5;
-    vec4 cubeDistance = vec4(0, 0, 1, length(max(abs(closestCubePosition) - qubeHalfDistance,0.0))); // make always full lit
-
-    vec3 closestSpherePosition = fract(position) - 0.5;
-    vec4 sphereDistance = vec4(1, 0, 0, length(closestSpherePosition) - sphereRadius);
-
-    return takeClosest(cubeDistance, sphereDistance);
+    return min(
+        min(scene.mCubeDistance, scene.mSphereDistance),
+        scene.mCylinderDistance
+        );
 }
 
-void getRay(in vec2 uv, out vec3 origin, out vec3 direction)
+float getDistance(in vec3 position)
 {
-    // TODO: maybe possible to get this passed from vertex shader directly?
-    float angleX = -fMouse.x / 100.0;
-    float angleY = fMouse.y / 100.0;
-
-    vec3 target = vec3(0.5);
-	origin = vec3(-sin(-angleX)* cos(-angleY), sin(-angleY), -cos(-angleX) * cos(-angleY)) * 0.50 + target;
-    vec3 zAxis = normalize(target - origin);
-	vec3 xAxis = normalize(cross(vec3(0, 1, 0), zAxis));
-	vec3 yAxis = cross(zAxis, xAxis);
-
-    direction = mat3(xAxis, yAxis, zAxis) * normalize(vec3(uv, 1.0));
+    Scene scene;
+    getScene(position, scene);
+    return getMinimumDistance(scene);
 }
 
 vec3 getNormal(in vec3 position)
@@ -50,32 +55,79 @@ vec3 getNormal(in vec3 position)
     // For now we just keep it simple and pick one sample in each axis direction (+x, -x, +y, -y, +z, -z)
     vec2 epsilon = vec2(0.0, epsilon);
     return normalize(vec3(
-        getWorldAt(position + epsilon.yxx).w - getWorldAt(position - epsilon.yxx).w,
-        getWorldAt(position + epsilon.xyx).w - getWorldAt(position - epsilon.xyx).w,
-        getWorldAt(position + epsilon.xxy).w - getWorldAt(position - epsilon.xxy).w
+        getDistance(position + epsilon.yxx) - getDistance(position - epsilon.yxx),
+        getDistance(position + epsilon.xyx) - getDistance(position - epsilon.xyx),
+        getDistance(position + epsilon.xxy) - getDistance(position - epsilon.xxy)
     ));
 }
 
 float getAmbientOcclusion(in vec3 position, in vec3 normal)
 {
-    return 1; // TODO...
+    float distance = epsilon * 10.0;
+    for (int i = 0; i < 6; ++i)
+        distance = distance + (0.25 + i / 6) * getDistance(position + normal * distance);
+    
+    return clamp(4 * distance, 0.0, 1.0);
 }
 
-void trace(in vec3 origin, in vec3 direction, out float distance, out vec3 worldPosition, out vec3 normal, out vec3 albedo, out float roughness, out float metallic, out float ambientOcclusion)
+void getMaterial(in vec3 position, out vec3 normal, out vec3 albedo, out float roughness, out float metallic, out float ambientOcclusion)
 {
-    vec4 worldInfo;
+    Scene scene;
+    getScene(position, scene);
+    float closest = getMinimumDistance(scene);
+    if (closest == scene.mSphereDistance)
+    {
+        normal = normalize(scene.closestSpherePosition);
+        albedo = vec3(1, 0, 0);
+        roughness = 0.5;
+        metallic = 1;
+    } else
+    {
+        normal = getNormal(position);
+        if (closest == scene.mCubeDistance)
+        {
+            albedo = vec3(0, 0, 1);
+            roughness = 1;
+            metallic = 0;
+        } else
+        {
+            float z = qubeDisplacement.z + position.z;
+            albedo = 0.5 * vec3(sin(position.x * 25 + z * 23), 1, sin(position.y * 25 + z * 13));
+            roughness = 1;
+            metallic = 0; 
+        }
+    }
+    ambientOcclusion = getAmbientOcclusion(position, normal);
+}
 
+void getRay(in vec2 uv, out vec3 origin, out vec3 direction)
+    // TODO: maybe possible to get this passed from vertex shader directly?
+{
+    float angleX = -fMouse.x / 100.0;
+    float angleY = fMouse.y / 100.0;
+
+    vec3 target = vec3(0.0);
+	origin = vec3(-sin(-angleX)* cos(-angleY), sin(-angleY), -cos(-angleX) * cos(-angleY)) * 0.50 + target;
+    vec3 zAxis = normalize(target - origin);
+	vec3 xAxis = normalize(cross(vec3(0, 1, 0), zAxis));
+	vec3 yAxis = cross(zAxis, xAxis);
+
+    direction = mat3(xAxis, yAxis, zAxis) * normalize(vec3(uv, 1.0));
+}
+
+float traceDistance(in vec3 origin, in vec3 direction)
+{
     float t = 0.0;
     float extraMultiplier = 0.5;
     float extraStep = 0;
-    for (int i = 0; i < 75; ++i)
+    for (int i = 0; i < 150; ++i)
     {
-        worldInfo = getWorldAt(origin + direction * (t + extraStep));
-        if (worldInfo.w < extraStep)
+        float distance = getDistance(origin + direction * (t + extraStep));
+        if (distance < extraStep)
         {
             if (extraStep < 0.001)
             {
-                t += worldInfo.w + extraStep;
+                t += distance + extraStep;
                 break;
             }
             extraMultiplier *= 0.5;
@@ -83,21 +135,15 @@ void trace(in vec3 origin, in vec3 direction, out float distance, out vec3 world
             continue;
         }
 
-        t += worldInfo.w + extraStep;
-        extraStep = worldInfo.w * extraMultiplier;
+        t += distance + extraStep;
+        extraStep = distance * extraMultiplier;
         extraMultiplier = min(extraMultiplier * 1.25, 0.5);
 
-        if (worldInfo.w < epsilon || t > maxDistance)
+        if (distance < epsilon || t > maxDistance)
             break;
     }
 
-    distance = t;
-    worldPosition = origin + direction * t;
-    normal = getNormal(worldPosition);
-    albedo = worldInfo.rgb;
-    roughness = 1; // we will add these later when lit impl them
-    metallic = 0; // we will add these later when lit impl them
-    ambientOcclusion = getAmbientOcclusion(worldPosition, normal);
+    return t;
 }
 
 vec3 lit(
@@ -122,17 +168,19 @@ void main()
     vec3 origin;
     vec3 direction;
     getRay(screenXY, origin, direction);
+
+    float distance = traceDistance(origin, direction);
    
-    vec3 worldPosition;
-   	vec3 normal;
+    vec3 worldPosition = origin + direction * distance;
+    vec3 normal;
     vec3 albedo;
     float roughness;
     float metallic;
     float ambientOcclusion;
-    float distance;
-    trace(origin, direction, distance, worldPosition, normal, albedo, roughness, metallic, ambientOcclusion);
+    getMaterial(worldPosition, normal, albedo, roughness, metallic, ambientOcclusion);
 
-    float fogAmount = min(4.0 / (1.0 + 0.5 * distance * distance), 1.0);
     vec3 litColor = lit(worldPosition, origin, albedo, normal, roughness, metallic, ambientOcclusion);
-	gl_FragColor = vec4(mix(vec3(0.3, 0.2, 0.1), litColor, fogAmount), 1.0);
+
+    float fogAmount = min(16.0 / (1.0 + 0.5 * distance * distance), 1.0);
+	gl_FragColor = vec4(mix(vec3(0.1, 0.07, 0.03), litColor, fogAmount), 1.0);
 }
