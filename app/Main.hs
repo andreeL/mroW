@@ -1,6 +1,8 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main where
 
+import           Control.Concurrent.STM
+import qualified Control.Exception
 import           Control.Monad
 import           Data.Bits ((.|.))
 import           Data.Maybe
@@ -8,7 +10,6 @@ import           Game
 import           Graphics.GL
 import qualified Graphics.UI.GLFW as GLFW
 import           OpenGLHelpers
-import qualified Control.Exception
 
 errorCallback :: GLFW.ErrorCallback
 errorCallback error description = do
@@ -33,6 +34,9 @@ data GLState = GLState {
     sceneProgram :: GLSLProgram,
     postProcessingProgram :: GLSLProgram
     }
+
+type GameEvent = GameState -> GameState
+type EventQueue = Control.Concurrent.STM.TQueue GameEvent
 
 sceneProgramSource = ("shaders/Fullscreen_vert.glsl", "shaders/Main_frag.glsl") :: (FilePath, FilePath)
 postProcessingProgramSource = ("shaders/Fullscreen_vert.glsl", "shaders/PostProcessing_frag.glsl") :: (FilePath, FilePath)
@@ -67,28 +71,32 @@ main = do
             Just window -> do
                 GLFW.makeContextCurrent (Just window)
                 GLFW.swapInterval 1 -- assuming this enables vsync (doesn't work on my machine)
+
+                eventQueue <- newTQueueIO
                 progGLState <- createGLState
 
-                -- TODO: we probably want some proper event system
-                -- these callbacks are just put here temporarily...
                 GLFW.setKeyCallback window (Just $ \window key scancode action mods -> do
                     when (action == GLFW.KeyState'Pressed) $ do
                         when (key == GLFW.Key'Escape) $ GLFW.setWindowShouldClose window True
-                        when (key == GLFW.Key'F1) $ recreateGLSLPrograms progGLState
+                        when (key == GLFW.Key'F1) $ atomically $ writeTQueue eventQueue $ snd . setDirtyShadersFlag
                     )
 
                 GLFW.setCursorPosCallback window (Just $ \win x y -> do
-                    let sceneProgramId = getProgramId . sceneProgram $ progGLState
-                    glUseProgram sceneProgramId
-                    setFloat2 sceneProgramId "fMouse" Nothing (realToFrac x) (realToFrac y)
-                    return ()
+                    atomically $ writeTQueue eventQueue $ snd . setMousePos (x, y)
                     )
 
-                runLoop progGLState window
+                runLoop eventQueue createGameState progGLState window
                 GLFW.destroyWindow window
 
-runLoop :: GLState -> GLFW.Window -> IO ()
-runLoop progGLState@GLState{..} window = do
+runQueuedEvents :: EventQueue -> GameState -> IO GameState
+runQueuedEvents eventQueue gameState = do
+    maybeEvent <- atomically $ tryReadTQueue eventQueue
+    case maybeEvent of
+        Just event -> runQueuedEvents eventQueue (event gameState)
+        Nothing -> return gameState
+
+runLoop :: EventQueue -> GameState -> GLState -> GLFW.Window -> IO ()
+runLoop eventQueue gameState progGLState@GLState{..} window = do
     GLFW.pollEvents
     windowShouldClose <- GLFW.windowShouldClose window
     case windowShouldClose of
@@ -97,9 +105,14 @@ runLoop progGLState@GLState{..} window = do
             maybeTime <- GLFW.getTime
             let time = fromMaybe 0 maybeTime
 
-            -- handle events ?
+            -- handle events
+            gameState' <- runQueuedEvents eventQueue gameState
 
             -- update state ?
+            let (shadersAreDirty, gameState'') = extractDirtyShadersFlag gameState'
+            when (shadersAreDirty) $ do
+                recreateGLSLPrograms progGLState
+            let (mouseX, mouseY) = getMousePos gameState''
 
             -- pre render
             (width, height) <- GLFW.getFramebufferSize window
@@ -118,6 +131,7 @@ runLoop progGLState@GLState{..} window = do
                     glUseProgram programId
                     setFloat programId "fTime" Nothing (realToFrac time)
                     setFloat2 programId "fFov" Nothing (fst fov) (snd fov)
+                    setFloat2 programId "fMouse" Nothing (realToFrac mouseX) (realToFrac mouseY)
                     setupAction programId
                     glDrawArrays GL_TRIANGLES 0 3
 
@@ -134,4 +148,4 @@ runLoop progGLState@GLState{..} window = do
 
             -- post render
             GLFW.swapBuffers window
-            runLoop progGLState window
+            runLoop eventQueue gameState'' progGLState window

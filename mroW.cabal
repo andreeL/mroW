@@ -19,6 +19,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     Game
   build-depends:       base >= 4.7 && < 5
+                     , microlens-platform
   default-language:    Haskell2010
 
 executable mroW-exe
@@ -29,6 +30,7 @@ executable mroW-exe
                      , mroW
                      , GLFW-b
                      , OpenGLRaw
+                     , stm
   other-modules:       OpenGLHelpers
   default-language:    Haskell2010
 

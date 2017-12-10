@@ -6,5 +6,5 @@ import Game
 spec :: Spec
 spec =
   describe "createGameState" $ do
-    it "constructs" $
-      createGameState `shouldBe` GameState
+    it "constructs something (not undefined)" $
+      createGameState `shouldBe` createGameState
