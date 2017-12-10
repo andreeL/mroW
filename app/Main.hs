@@ -4,7 +4,7 @@ module Main where
 import           Control.Monad
 import           Data.Bits ((.|.))
 import           Data.Maybe
-import           Lib
+import           Game
 import           Graphics.GL
 import qualified Graphics.UI.GLFW as GLFW
 import           OpenGLHelpers

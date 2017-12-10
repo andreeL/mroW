@@ -120,7 +120,7 @@ float traceDistance(in vec3 origin, in vec3 direction)
     float t = 0.0;
     float extraMultiplier = 0.5;
     float extraStep = 0;
-    for (int i = 0; i < 100; ++i)
+    for (int i = 0; i < 75; ++i)
     {
         float distance = getDistance(origin + direction * (t + extraStep));
         if (distance < extraStep)
