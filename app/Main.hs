@@ -81,14 +81,15 @@ main = do
                     when (action == GLFW.KeyState'Pressed) $ do
                         when (key == GLFW.Key'Escape) $ GLFW.setWindowShouldClose window True
                         when (key == GLFW.Key'F1) $ atomically $ writeTQueue eventQueue $ snd . setDirtyShadersFlag
-                        when (key == GLFW.Key'F2) $ atomically $ writeTQueue eventQueue $ snd . toggleUseFreeCamera
+                        when (key == GLFW.Key'F2) $ atomically $ writeTQueue eventQueue $ snd . useNextCameraMode
                     )
 
                 GLFW.setCursorPosCallback window (Just $ \win x y -> do
                     atomically $ writeTQueue eventQueue $ snd . setMousePos (x, y)
                     )
 
-                runLoop eventQueue createGameState progGLState window
+                time <- fmap (fromMaybe 0) GLFW.getTime
+                runLoop time eventQueue createGameState progGLState window
                 GLFW.destroyWindow window
 
 runQueuedEvents :: EventQueue -> GameState -> IO GameState
@@ -98,17 +99,18 @@ runQueuedEvents eventQueue gameState = do
         Just event -> runQueuedEvents eventQueue (event gameState)
         Nothing -> return gameState
 
-runLoop :: EventQueue -> GameState -> GLState -> GLFW.Window -> IO ()
-runLoop eventQueue gameState progGLState@GLState{..} window = do
+runLoop :: Double -> EventQueue -> GameState -> GLState -> GLFW.Window -> IO ()
+runLoop previousTime eventQueue gameState progGLState@GLState{..} window = do
     GLFW.pollEvents
     windowShouldClose <- GLFW.windowShouldClose window
     case windowShouldClose of
         True -> return ()
         False -> do
             time <- fmap (fromMaybe 0) GLFW.getTime
+            let deltaTime = realToFrac . max 0 . min 1 $ (time - previousTime)
 
             -- handle events
-            gameState' <- runQueuedEvents eventQueue gameState
+            ((eyePosition, eyeRotation), gameState') <- fmap (run time deltaTime) $ runQueuedEvents eventQueue gameState
 
             -- update state ?
             let (shadersAreDirty, gameState'') = extractDirtyShadersFlag gameState'
@@ -120,17 +122,6 @@ runLoop eventQueue gameState progGLState@GLState{..} window = do
             (width, height) <- GLFW.getFramebufferSize window
             let aspectRatio = fromIntegral width / fromIntegral height
             let fov = if aspectRatio > 1.0 then (aspectRatio, 1.0) else (1.0, 1 / aspectRatio)
-            let target = (L.V3 (realToFrac . sin $ time * 0.75) (realToFrac . cos $ time * 0.75) 0) L.^* 0.25 :: L.V3 Float
-            let eyePosition = (L.V3 (realToFrac . sin $ time * 0.3) (realToFrac . (0.9 *) . cos $ time * 0.3) (-1.5)) L.^* 1.5 :: L.V3 Float
-            let eyeRotation = if (getUseFreeCamera gameState')
-                then let rotationX = L.axisAngle (L.V3 0 1 0) (realToFrac (-mouseX) / 50)
-                         rotationY = L.axisAngle (L.V3 1 0 0) (realToFrac (-mouseY) / 50)
-                      in L.fromQuaternion (rotationY * rotationX) :: L.M33 Float
-                else let vZ = L.normalize $ target - eyePosition
-                         vX = L.normalize $ L.cross vZ (L.V3 0 1 0)
-                         vY = L.cross vX vZ
-                      in L.V3 vX vY vZ :: L.M33 Float
-
             let withFullscreenGLSLProgram targetBuffer (width, height) program setupAction = do
                     -- for now we just treat the VAO as a GL requirement, and ignore it
                     glBindVertexArray dummyVAO
@@ -164,4 +155,4 @@ runLoop eventQueue gameState progGLState@GLState{..} window = do
 
             -- post render
             GLFW.swapBuffers window
-            runLoop eventQueue gameState'' progGLState window
+            runLoop time eventQueue gameState'' progGLState window
