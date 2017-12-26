@@ -4,6 +4,8 @@ varying vec2 screenUV;
 varying vec2 screenXY;
 uniform float fTime = 0;
 uniform vec2 fMouse = ivec2(0, 0);
+uniform vec3 eyePosition;
+uniform mat3 eyeRotation;
 
 float epsilon = 0.005;
 float maxDistance = 30.f; // TODO: set this to something sensible
@@ -103,16 +105,8 @@ void getMaterial(in vec3 position, out vec3 normal, out vec3 albedo, out float r
 void getRay(in vec2 uv, out vec3 origin, out vec3 direction)
     // TODO: maybe possible to get this passed from vertex shader directly?
 {
-    float angleX = -fMouse.x / 100.0;
-    float angleY = fMouse.y / 100.0;
-
-    vec3 target = vec3(0.0);
-	origin = vec3(-sin(-angleX)* cos(-angleY), sin(-angleY), -cos(-angleX) * cos(-angleY)) * 0.50 + target;
-    vec3 zAxis = normalize(target - origin);
-	vec3 xAxis = normalize(cross(vec3(0, 1, 0), zAxis));
-	vec3 yAxis = cross(zAxis, xAxis);
-
-    direction = mat3(xAxis, yAxis, zAxis) * normalize(vec3(uv, 1.0));
+    origin = eyePosition;
+    direction = normalize(eyeRotation * vec3(uv, 1.0));
 }
 
 float traceDistance(in vec3 origin, in vec3 direction)

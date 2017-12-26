@@ -15,6 +15,8 @@ module OpenGLHelpers (
     setInt,
     setFloat,
     setFloat2,
+    setFloat3,
+    setMatrix33,
     createSceneTargetTexture,
     createSceneTargetBuffer
 ) where
@@ -99,6 +101,17 @@ setFloat oId name mLoc x = withUniformLocation oId name mLoc (\loc -> glUniform1
 
 setFloat2 :: GLuint -> String -> Maybe GLint -> GLfloat -> GLfloat -> IO (GLint)
 setFloat2 oId name mLoc x y = withUniformLocation oId name mLoc (\loc -> glUniform2f loc x y)
+
+setFloat3 :: GLuint -> String -> Maybe GLint -> GLfloat -> GLfloat -> GLfloat -> IO (GLint)
+setFloat3 oId name mLoc x y z = withUniformLocation oId name mLoc (\loc -> glUniform3f loc x y z)
+
+setMatrix33 :: GLuint -> String -> Maybe GLint -> [GLfloat] -> IO (GLint)
+setMatrix33 oId name mLoc matrix = do
+    withUniformLocation oId name mLoc $ \loc -> do
+        withArrayLen matrix $ \len matrixPtr -> do
+            if len == 9
+                then glUniformMatrix3fv loc 1 GL_FALSE matrixPtr
+                else logString "called setMatrix33 with wrong length" (Just len)
 
 createSceneTargetTexture :: GLsizei -> GLsizei -> IO (GLuint)
 createSceneTargetTexture width height = do

@@ -8,14 +8,17 @@ module Game (
     setDirtyShadersFlag,
     extractDirtyShadersFlag,
     setMousePos,
-    getMousePos
+    getMousePos,
+    toggleUseFreeCamera,
+    getUseFreeCamera
     ) where
 
 import Lens.Micro.Platform
 
 data GameDebugState = GameDebugState {
     _dirtyShadersFlag :: Bool,
-    _mousePos :: (Double, Double)
+    _mousePos :: (Double, Double),
+    _useFreeCamera :: Bool
 } deriving (Show, Eq)
 makeLenses ''GameDebugState
 
@@ -28,6 +31,7 @@ createGameDebugState :: GameDebugState
 createGameDebugState = let
     _dirtyShadersFlag = False
     _mousePos = (0, 0)
+    _useFreeCamera = False
     in GameDebugState{..}
 
 createGameState :: GameState
@@ -45,3 +49,9 @@ setMousePos newMousePos gameState = ((), (debugState.mousePos.~ newMousePos $ ga
 
 getMousePos :: GameState -> (Double, Double)
 getMousePos = view (debugState.mousePos)
+
+toggleUseFreeCamera :: GameState -> ((), GameState)
+toggleUseFreeCamera gameState = ((), gameState & debugState.useFreeCamera %~ not)
+
+getUseFreeCamera :: GameState -> Bool
+getUseFreeCamera = view (debugState.useFreeCamera)
