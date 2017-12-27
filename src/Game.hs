@@ -90,6 +90,7 @@ run time deltaSeconds gameState = let
     _debugState = gameState ^. debugState
     playerInput = PlayerInput {
         _time = time,
+        _deltaSeconds = deltaSeconds,
         _moveUp = isJust . getVariable actionUp $ gameState,
         _moveLeft = isJust . getVariable actionLeft $ gameState,
         _moveDown = isJust . getVariable actionDown $ gameState,
