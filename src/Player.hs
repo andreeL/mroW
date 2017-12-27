@@ -27,5 +27,5 @@ createPlayer position = bScan updatePosition position
   where updatePosition currentPosition PlayerInput{..} =
           let x = (if _moveRight then 1 else 0) + (if _moveLeft then (-1) else 0)
               y = (if _moveUp then 1 else 0) + (if _moveDown then (-1) else 0)
-              speed = 1 * _deltaSeconds
+              speed = 2 * _deltaSeconds
            in (normalize $ V3 x y 0) ^* speed ^+^ currentPosition

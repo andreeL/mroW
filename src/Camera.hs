@@ -10,10 +10,10 @@ module Camera
   , createFreeCamera
   ) where
 
-import Behaviour (Behaviour(..))
+import Behaviour (Behaviour(..), bScanSplit)
 import Control.Arrow (Arrow(..))
 import Common
-import Linear (V2(..), V3(..), M33(..), normalize, cross, axisAngle, fromQuaternion)
+import Linear (V2(..), V3(..), M33(..), normalize, cross, axisAngle, fromQuaternion, (^+^), (^*))
 
 type Target = V3 Float
 type MouseXY = V2 Float
@@ -38,17 +38,29 @@ getEyePosition time =
 createStaticCamera :: Placement -> Camera
 createStaticCamera placement = pure placement
 
-createCinematicCamera :: Camera
-createCinematicCamera = arr $ \CameraInput{..} ->
-  let eyePosition = getEyePosition _time
-      vZ = normalize $ _target - eyePosition
-      vX = normalize $ cross (V3 0 1 0) vZ
-      vY = cross vZ vX
-   in (eyePosition, V3 vX vY vZ)
-            
+createCinematicCamera :: Position -> Camera
+createCinematicCamera = bScanSplit $ \currentPosition CameraInput{..} ->
+  let nextPosition = follow _deltaSeconds _target . moveBack _deltaSeconds $ currentPosition
+   in (nextPosition, (nextPosition, lookAt _target nextPosition))
+
 createFreeCamera :: Camera
 createFreeCamera = arr $ \CameraInput{..} ->
   let eyePosition = getEyePosition _time
       rotationX = axisAngle (V3 0 1 0) (realToFrac (-(fst _mouseXY)) / 50)
       rotationY = axisAngle (V3 1 0 0) (realToFrac (-(snd _mouseXY)) / 50)
-   in (eyePosition, fromQuaternion (rotationY * rotationX))
+    in (eyePosition, fromQuaternion (rotationY * rotationX))
+
+moveBack :: DeltaTime -> Position -> Position
+moveBack deltaTime position = position ^+^ (V3 0 0 (deltaTime * (-2)))
+
+follow :: DeltaTime -> Position -> Position -> Position
+follow deltaTime target origin =
+  let toTarget = target - origin
+   in (origin ^+^ (toTarget ^* (1 - 0.25 ** deltaTime)))
+
+lookAt :: Position -> Position -> Rotation
+lookAt target origin =
+  let vZ = normalize $ target - origin
+      vX = normalize $ cross (V3 0 1 0) vZ
+      vY = cross vZ vX
+   in V3 vX vY vZ

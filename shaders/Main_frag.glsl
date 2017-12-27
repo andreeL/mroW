@@ -124,8 +124,8 @@ void getMaterial(in vec3 position, out vec3 normal, out vec3 albedo, out float r
 void getRay(in vec2 uv, out vec3 origin, out vec3 direction)
     // TODO: maybe possible to get this passed from vertex shader directly?
 {
-    origin = eyePosition;
     direction = normalize(eyeRotation * vec3(uv, 1.0));
+    origin = eyePosition + direction * 0.2;
 }
 
 float traceDistance(in float noOfSteps, in vec3 origin, in vec3 direction)

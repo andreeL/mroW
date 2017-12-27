@@ -74,7 +74,7 @@ createGameDebugState = let
 createCamera :: CameraMode -> Camera
 createCamera cameraMode = case cameraMode of
     StaticCamera -> createStaticCamera (L.V3 0 0 (-1.5), fromQuaternion $ L.Quaternion 1 L.zero)
-    CinematicCamera -> createCinematicCamera
+    CinematicCamera -> createCinematicCamera (L.V3 0 0 (-1.5))
     FreeCamera -> createFreeCamera
 
 createGameState :: GameState
