@@ -14,7 +14,9 @@ module Game (
     ) where
 
 import Lens.Micro.Platform
-import Camera (Camera, CameraInput(..), Placement(..), staticCamera, cinematicCamera, freeCamera, getBehaviour)
+import Common
+import Camera (Camera, CameraInput(..), createStaticCamera, createCinematicCamera, createFreeCamera, getBehaviour)
+import Player (Player, PlayerInput(..), createPlayer)
 import Linear as L
 
 data CameraMode = StaticCamera | CinematicCamera | FreeCamera deriving (Bounded, Enum, Eq)
@@ -31,6 +33,7 @@ makeLenses ''GameDebugState
 
 data GameState = GameState {
     _camera :: Camera,
+    _player :: Player,
     _debugState :: GameDebugState
 }
 makeLenses ''GameState
@@ -44,27 +47,33 @@ createGameDebugState = let
 
 createCamera :: CameraMode -> Camera
 createCamera cameraMode = case cameraMode of
-    StaticCamera -> staticCamera (L.zero, fromQuaternion $ L.Quaternion 1 L.zero)
-    CinematicCamera -> cinematicCamera
-    FreeCamera -> freeCamera
+    StaticCamera -> createStaticCamera (L.V3 0 0 (-1.5), fromQuaternion $ L.Quaternion 1 L.zero)
+    CinematicCamera -> createCinematicCamera
+    FreeCamera -> createFreeCamera
 
 createGameState :: GameState
 createGameState = let
     _debugState = createGameDebugState
     _camera = createCamera (_debugState ^. cameraMode)
+    _player = createPlayer L.zero
     in GameState{..}
 
-run :: Double -> Float -> GameState -> (Placement, GameState)
+run :: Double -> Float -> GameState -> (Placement, Position, GameState)
 run time deltaSeconds gameState = let
     _debugState = gameState ^. debugState
+    playerInput = PlayerInput {
+        _time = time
+    }
+    (playerPosition, _player) = getBehaviour (gameState ^. player) playerInput
+
     cameraInput = CameraInput {
         _time = time,
         _deltaSeconds = deltaSeconds,
         _mouseXY = _debugState ^. mousePos,
-        _target = (L.V3 (realToFrac . sin $ time * 0.75) (realToFrac . cos $ time * 0.75) 0) L.^* 0.25
+        _target = playerPosition
     }
     (cameraPlacement, _camera) = getBehaviour (gameState ^. camera) cameraInput
-    in (cameraPlacement, GameState{..})
+    in (cameraPlacement, playerPosition, GameState{..})
 
 setDirtyShadersFlag :: GameState -> ((), GameState)
 setDirtyShadersFlag gameState = ((), (debugState.dirtyShadersFlag.~ True $ gameState))

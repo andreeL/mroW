@@ -110,7 +110,7 @@ runLoop previousTime eventQueue gameState progGLState@GLState{..} window = do
             let deltaTime = realToFrac . max 0 . min 1 $ (time - previousTime)
 
             -- handle events
-            ((eyePosition, eyeRotation), gameState') <- fmap (run time deltaTime) $ runQueuedEvents eventQueue gameState
+            ((eyePosition, eyeRotation), playerPosition, gameState') <- fmap (run time deltaTime) $ runQueuedEvents eventQueue gameState
 
             -- update state ?
             let (shadersAreDirty, gameState'') = extractDirtyShadersFlag gameState'
@@ -144,7 +144,8 @@ runLoop previousTime eventQueue gameState progGLState@GLState{..} window = do
 
             -- render scene
             withFullscreenGLSLProgram sceneTargetBuffer sceneTargetSize sceneProgram $ \programId -> do
-                return ()
+                let L.V3 pX pY pZ = playerPosition
+                setFloat3 programId "playerPosition" Nothing (realToFrac pX) (realToFrac pY) (realToFrac pZ)
 
             -- copy scene to main buffer with post processing
             withFullscreenGLSLProgram 0 (fromIntegral width, fromIntegral height) postProcessingProgram $ \programId -> do

@@ -19,7 +19,9 @@ library
   hs-source-dirs:      src
   exposed-modules:     Behaviour
                      , Camera
+                     , Common
                      , Game
+                     , Player
   build-depends:       base >= 4.7 && < 5
                      , microlens-platform
                      , linear                     

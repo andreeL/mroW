@@ -6,21 +6,30 @@ uniform float fTime = 0;
 uniform vec2 fMouse = ivec2(0, 0);
 uniform vec3 eyePosition;
 uniform mat3 eyeRotation;
+uniform vec3 playerPosition;
 
 float epsilon = 0.005;
 float maxDistance = 30.f; // TODO: set this to something sensible
 
-float sphereRadius = 0.125 + 0.1 * sin(fTime * 3.1);
+float sphereRadius = 0.125 + 0.05 * sin(fTime * 2.1);
 vec3 qubeDisplacement = vec3(0.5, 0, fTime);
 vec3 qubeHalfDistance = vec3(0.125, 0.025, 0.125) * 2;
 
 struct Scene
 {
+    // closest cube
     vec3 closestCubePosition;
     float mCubeDistance;
+
+    // closest sphere
     vec3 closestSpherePosition;
     float mSphereDistance;
+
+    // surrounding worm hole (cylinder)
     float mCylinderDistance;
+
+    // player
+    float mPlayerDistance;
 };
 
 void getScene(in vec3 position, out Scene scene)
@@ -33,13 +42,16 @@ void getScene(in vec3 position, out Scene scene)
 
     float cylinderExtent = 2.0;
     scene.mCylinderDistance = cylinderExtent - length(position.xy);
+
+    const float playerRadious = 0.5;
+    scene.mPlayerDistance = length(playerPosition - position) - playerRadious;
 }
 
 float getMinimumDistance(in Scene scene)
 {
     return min(
         min(scene.mCubeDistance, scene.mSphereDistance),
-        scene.mCylinderDistance
+        min(scene.mCylinderDistance, scene.mPlayerDistance)
         );
 }
 
@@ -86,17 +98,24 @@ void getMaterial(in vec3 position, out vec3 normal, out vec3 albedo, out float r
     } else
     {
         normal = getNormal(position);
-        if (closest == scene.mCubeDistance)
-        {
-            albedo = vec3(0, 0, 1);
-            roughness = 0.4;
-            metallic = 0;
-        } else
+        if (closest == scene.mCylinderDistance)
         {
             float z = qubeDisplacement.z + position.z;
             albedo = 0.5 * vec3(sin(position.x * 25 + z * 23), 1, sin(position.y * 25 + z * 13));
             roughness = 1;
             metallic = 0; 
+        }
+        else if (closest == scene.mCubeDistance)
+        {
+            albedo = vec3(0, 0, 1);
+            roughness = 0.4;
+            metallic = 0;
+        }
+        else //if (closest == scene.mPlayerDistance)
+        {
+            albedo = vec3(0.8, 0.5, 0.3);
+            roughness = 0.4;
+            metallic = 0;
         }
     }
     ambientOcclusion = getAmbientOcclusion(position, normal);
@@ -109,12 +128,12 @@ void getRay(in vec2 uv, out vec3 origin, out vec3 direction)
     direction = normalize(eyeRotation * vec3(uv, 1.0));
 }
 
-float traceDistance(in vec3 origin, in vec3 direction)
+float traceDistance(in float noOfSteps, in vec3 origin, in vec3 direction)
 {
     float t = 0.0;
     float extraMultiplier = 0.5;
     float extraStep = 0;
-    for (int i = 0; i < 75; ++i)
+    for (int i = 0; i < noOfSteps; ++i)
     {
         float distance = getDistance(origin + direction * (t + extraStep));
         if (distance < extraStep)
@@ -163,7 +182,7 @@ void main()
     vec3 direction;
     getRay(screenXY, origin, direction);
 
-    float distance = traceDistance(origin, direction);
+    float distance = traceDistance(65, origin, direction);
     vec3 worldPosition = origin + direction * distance;
     vec3 normal;
     vec3 albedo;
@@ -178,7 +197,7 @@ void main()
     {
         vec3 newDirection = direction - 2 * dot(direction, normal) * normal;
         vec3 newOrigin = origin + direction * (distance - epsilon * 10);
-        vec3 newWorldPosition = newOrigin + newDirection * traceDistance(newOrigin, newDirection);
+        vec3 newWorldPosition = newOrigin + newDirection * traceDistance(30, newOrigin, newDirection);
         float newRoughness;
         getMaterial(newWorldPosition, normal, albedo, newRoughness, metallic, ambientOcclusion);
         vec3 newLitColor = lit(newWorldPosition, origin, albedo, normal, newRoughness, metallic, ambientOcclusion);
