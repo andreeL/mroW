@@ -64,6 +64,12 @@ recreateGLSLPrograms GLState{..} = Control.Exception.catch (do
         failHandler :: Control.Exception.ErrorCall -> IO ()
         failHandler _ = putStrLn $ "Failed to update all shaders!"
 
+setOrRemove :: VariableName -> VariableValue -> Bool -> GameState -> ((), GameState)
+setOrRemove variableName variableValue doSet =
+    if (doSet == True)
+        then setVariable variableName variableValue
+        else removeVariable variableName
+
 main :: IO ()
 main = do
     withGLFW $ do
@@ -78,10 +84,16 @@ main = do
                 progGLState <- createGLState
 
                 GLFW.setKeyCallback window (Just $ \window key scancode action mods -> do
-                    when (action == GLFW.KeyState'Pressed) $ do
+                    let pressed = action /= GLFW.KeyState'Released
+                    when pressed $ do
                         when (key == GLFW.Key'Escape) $ GLFW.setWindowShouldClose window True
                         when (key == GLFW.Key'F1) $ atomically $ writeTQueue eventQueue $ snd . setDirtyShadersFlag
                         when (key == GLFW.Key'F2) $ atomically $ writeTQueue eventQueue $ snd . useNextCameraMode
+
+                    when (key == GLFW.Key'W) $ atomically $ writeTQueue eventQueue $ snd . setOrRemove actionUp "" pressed
+                    when (key == GLFW.Key'A) $ atomically $ writeTQueue eventQueue $ snd . setOrRemove actionLeft "" pressed
+                    when (key == GLFW.Key'S) $ atomically $ writeTQueue eventQueue $ snd . setOrRemove actionDown "" pressed
+                    when (key == GLFW.Key'D) $ atomically $ writeTQueue eventQueue $ snd . setOrRemove actionRight "" pressed
                     )
 
                 GLFW.setCursorPosCallback window (Just $ \win x y -> do

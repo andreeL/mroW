@@ -1,5 +1,6 @@
 module Behaviour
   ( Behaviour(..)
+  , bScan
   ) where
 
 import Control.Applicative (Applicative(..))
@@ -32,3 +33,8 @@ instance Arrow Behaviour where
   first b = Behaviour $ \(i1, i2) ->
     let (o, b') = getBehaviour b i1
      in ((o, i2), first b')
+
+bScan :: (o -> i -> o) -> o -> Behaviour i o
+bScan f acc = Behaviour $ \i ->
+  let next = f acc i
+   in (next, bScan f next)

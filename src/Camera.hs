@@ -42,8 +42,8 @@ createCinematicCamera :: Camera
 createCinematicCamera = arr $ \CameraInput{..} ->
   let eyePosition = getEyePosition _time
       vZ = normalize $ _target - eyePosition
-      vX = normalize $ cross vZ (V3 0 1 0)
-      vY = cross vX vZ
+      vX = normalize $ cross (V3 0 1 0) vZ
+      vY = cross vZ vX
    in (eyePosition, V3 vX vY vZ)
             
 createFreeCamera :: Camera
