@@ -1,7 +1,7 @@
 module Behaviour
   ( Behaviour(..)
   , bScan
-  , bScanSplit
+  , bScanFlip
   ) where
 
 import Control.Applicative (Applicative(..))
@@ -40,7 +40,5 @@ bScan f acc = Behaviour $ \i ->
   let next = f acc i
    in (next, bScan f next)
 
-bScanSplit :: (a -> i -> (a, o)) -> a -> Behaviour i o
-bScanSplit f acc = Behaviour $ \i ->
-  let next = f acc i
-   in (snd next, bScanSplit f (fst next))
+bScanFlip :: (i -> o -> o) -> o -> Behaviour i o
+bScanFlip f acc = bScan (flip f) acc

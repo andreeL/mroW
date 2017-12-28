@@ -1,4 +1,5 @@
 {-# Language RecordWildCards #-}
+{-# LANGUAGE Arrows #-}
 
 module Camera
   ( Placement
@@ -10,8 +11,8 @@ module Camera
   , createFreeCamera
   ) where
 
-import Behaviour (Behaviour(..), bScanSplit)
-import Control.Arrow (Arrow(..))
+import Behaviour (Behaviour(..), bScan, bScanFlip)
+import Control.Arrow (Arrow(..), returnA)
 import Common
 import Linear (V2(..), V3(..), M33(..), normalize, cross, axisAngle, fromQuaternion, (^+^), (^*))
 
@@ -39,9 +40,11 @@ createStaticCamera :: Placement -> Camera
 createStaticCamera placement = pure placement
 
 createCinematicCamera :: Position -> Camera
-createCinematicCamera = bScanSplit $ \currentPosition CameraInput{..} ->
-  let nextPosition = follow _deltaSeconds _target . moveBack _deltaSeconds $ currentPosition
-   in (nextPosition, (nextPosition, lookAt _target nextPosition))
+createCinematicCamera position =
+  let updatePosition CameraInput{..} = followBehind _deltaSeconds _target
+  in proc cameraInput@CameraInput{..} -> do
+    nextPosition <- bScanFlip updatePosition position -< cameraInput
+    returnA -< (nextPosition, lookAt _target nextPosition)
 
 createFreeCamera :: Camera
 createFreeCamera = arr $ \CameraInput{..} ->
@@ -50,13 +53,14 @@ createFreeCamera = arr $ \CameraInput{..} ->
       rotationY = axisAngle (V3 1 0 0) (realToFrac (-(snd _mouseXY)) / 50)
     in (eyePosition, fromQuaternion (rotationY * rotationX))
 
-moveBack :: DeltaTime -> Position -> Position
-moveBack deltaTime position = position ^+^ (V3 0 0 (deltaTime * (-2)))
-
 follow :: DeltaTime -> Position -> Position -> Position
 follow deltaTime target origin =
   let toTarget = target - origin
    in (origin ^+^ (toTarget ^* (1 - 0.25 ** deltaTime)))
+
+followBehind :: DeltaTime -> Position -> Position -> Position
+followBehind deltaTime target position =
+  follow deltaTime target $ position ^+^ (V3 0 0 (deltaTime * (-2)))
 
 lookAt :: Position -> Position -> Rotation
 lookAt target origin =
