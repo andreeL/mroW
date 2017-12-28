@@ -20,12 +20,14 @@ library
   exposed-modules:     Behaviour
                      , Camera
                      , Common
+                     , FontBuilder
                      , Game
                      , Player
   build-depends:       base >= 4.7 && < 5
                      , containers
                      , linear
                      , microlens-platform
+                     , freetype2
   default-language:    Haskell2010
 
 executable mroW-exe
