@@ -12,7 +12,7 @@ float epsilon = 0.005;
 float maxDistance = 30.f; // TODO: set this to something sensible
 
 float sphereRadius = 0.125 + 0.05 * sin(fTime * 2.1);
-vec3 qubeDisplacement = vec3(0.5, 0, fTime);
+vec3 qubeDisplacement = vec3(0.5, 0, fTime * -3);
 vec3 qubeHalfDistance = vec3(0.125, 0.025, 0.125) * 2;
 
 struct Scene
@@ -92,8 +92,8 @@ void getMaterial(in vec3 position, out vec3 normal, out vec3 albedo, out float r
     if (closest == scene.mSphereDistance)
     {
         normal = normalize(scene.closestSpherePosition);
-        albedo = vec3(1, 0, 0);
-        roughness = 0.25;
+        albedo = vec3(0.8, 0.5, 0.3);
+        roughness = 0.66;
         metallic = 1;
     } else
     {
@@ -113,9 +113,9 @@ void getMaterial(in vec3 position, out vec3 normal, out vec3 albedo, out float r
         }
         else //if (closest == scene.mPlayerDistance)
         {
-            albedo = vec3(0.8, 0.5, 0.3);
-            roughness = 0.4;
-            metallic = 0;
+            albedo = vec3(1, 0, 0);
+            roughness = 0.25;
+            metallic = 1;
         }
     }
     ambientOcclusion = getAmbientOcclusion(position, normal);
@@ -197,7 +197,7 @@ void main()
     {
         vec3 newDirection = direction - 2 * dot(direction, normal) * normal;
         vec3 newOrigin = origin + direction * (distance - epsilon * 10);
-        vec3 newWorldPosition = newOrigin + newDirection * traceDistance(30, newOrigin, newDirection);
+        vec3 newWorldPosition = newOrigin + newDirection * traceDistance(40, newOrigin, newDirection);
         float newRoughness;
         getMaterial(newWorldPosition, normal, albedo, newRoughness, metallic, ambientOcclusion);
         vec3 newLitColor = lit(newWorldPosition, origin, albedo, normal, newRoughness, metallic, ambientOcclusion);
