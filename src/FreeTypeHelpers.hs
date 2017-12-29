@@ -1,5 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
-module FontBuilder
+module FreeTypeHelpers
   ( FTGlyph(..)
   , getGlyphs
   , showGlyphInfos -- only for debuging
