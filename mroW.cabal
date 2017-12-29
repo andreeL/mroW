@@ -20,6 +20,7 @@ library
   exposed-modules:     Behaviour
                      , Camera
                      , Common
+                     , FontBuilder
                      , FreeTypeHelpers
                      , Game
                      , OpenGLHelpers

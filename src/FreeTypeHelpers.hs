@@ -5,12 +5,14 @@ module FreeTypeHelpers
   , showGlyphInfos -- only for debuging
   ) where
 
-import Control.Monad
-import qualified Data.Vector.Storable as VS
-import Data.Char
-import Foreign
-import Foreign.C.Types
-import Foreign.C.String
+import Control.Monad (forM, forM_, when)
+import Data.Vector.Unboxed (Vector, generateM)
+import Data.Char (intToDigit)
+import Data.Word (Word8)
+import Foreign (alloca, peek, peekElemOff)
+import Foreign.C.String (castCCharToChar, withCString)
+
+-- FreeType imports
 import Graphics.Rendering.FreeType.Internal
 import qualified Graphics.Rendering.FreeType.Internal.Bitmap as FTB
 --import qualified Graphics.Rendering.FreeType.Internal.BitmapGlyph as FTBG
@@ -26,7 +28,7 @@ data FTGlyph = FTGlyph {
   _size :: (Int, Int),
   _bearing :: (Int, Int),
   _advance :: Int,
-  _image :: VS.Vector CChar
+  _image :: Vector Word8
 }
 
 showFailmessage :: String -> FT_Error -> IO ()
@@ -80,7 +82,7 @@ extractFTGlyph ftGlyphSlot = do
   let _size = (fromIntegral $ FTB.width ftBitmap, fromIntegral $ FTB.rows ftBitmap)
   let _bearing = (norm . FTGM.horiBearingX $ ftMetrics, norm . FTGM.horiBearingY $ ftMetrics)
   let _advance = norm . FTGM.horiAdvance $ ftMetrics
-  _image <- VS.generateM (uncurry (*) _size) (peekElemOff buffer)
+  _image <- generateM (uncurry (*) _size) (fmap fromIntegral . peekElemOff buffer)
   pure FTGlyph{..}
 
 getGlyphs :: Int -> [Char] -> IO [(Char, FTGlyph)]
