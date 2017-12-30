@@ -28,6 +28,7 @@ library
   build-depends:       base >= 4.7 && < 5
                      , containers
                      , freetype2
+                     , primitive
                      , linear
                      , microlens-platform
                      , OpenGLRaw
