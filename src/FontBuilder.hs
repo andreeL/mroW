@@ -26,7 +26,8 @@ maxDelta = 10000 :: Int
 createBinaryMask :: FTGlyph -> (Int, Int) -> Int -> Int -> VConst.Vector (Int, Int)
 createBinaryMask FTGlyph{..} (newWidth, newHeight) zeroVal oneVal =
   let (width, height) = _size
-      getVal x y = getGlyphPixel x y -- TODONOW! add some offset depending on _bearing
+      (offsetX, offsetY) = ((newWidth - width) `div` 2, (newHeight - height) `div` 2)
+      getVal x y = getGlyphPixel (x - offsetX) (y - offsetY)
       getGlyphPixel x y =
         let val = if (x >= 0 && x < width && y >= 0 && y < height)
                     then if _image ! (x + y * width) < 128 then oneVal else zeroVal
@@ -34,14 +35,14 @@ createBinaryMask FTGlyph{..} (newWidth, newHeight) zeroVal oneVal =
          in (val, val)
 
   in VConst.fromList [getVal x y | y <- [0..newHeight - 1], x <- [0..newWidth - 1]]
-  
+
 run8SSEDT :: PrimMonad m => (Int, Int) -> VMutable.MVector (PrimState m) (Int, Int) -> m ()
 run8SSEDT (newWidth, newHeight) df = do
   let safeGetPoint x y =
         if (x >= 0 && y >= 0 && x < newWidth && y < newHeight)
           then VMutable.read df (x + y * newWidth)
           else pure (maxDelta, maxDelta)
-    
+
   let pickBest x y offsets = do
         let index = x + y * newWidth
         thisPoint <- VMutable.read df index
@@ -54,15 +55,15 @@ run8SSEDT (newWidth, newHeight) df = do
           ) (thisPoint, getSquareLength thisPoint) offsets
         VMutable.write df index best
 
-  let mask1 = [(-1, 0), (0, -1), (-1, -1), (1, -1)] :: [(Int, Int)]
+  let mask1 = [(-1, -1), (0, -1), (1, -1), (-1, 0)] :: [(Int, Int)]
       mask2 = [(1, 0)] :: [(Int, Int)]
-      mask3 = [(1, 0), (0, 1), (-1, 1), (1, 1)] :: [(Int, Int)]
+      mask3 = [(-1, 1), (0, 1), (1, 1), (1, 0)] :: [(Int, Int)]
       mask4 = [(-1, 0)] :: [(Int, Int)]
       xForward = [0..newWidth - 1]
       xBackward = reverse xForward
       yForward = [0..newHeight - 1]
       yBackward = reverse yForward
-      
+
   forM_ yForward $ \y -> do
     forM_ xForward $ \x -> pickBest x y mask1
     forM_ xBackward $ \x -> pickBest x y mask2
@@ -76,7 +77,7 @@ buildDF ftGlyph newSize zeroVal oneVal = runST $ do
     run8SSEDT newSize df *> unsafeFreeze df
 
 buildSDF :: FTGlyph -> (Int, Int) -> VConst.Vector Word8
-buildSDF ftGlyph@FTGlyph{..} newSize@(newWidth, newHeight) =
+buildSDF ftGlyph newSize =
   let posDF = buildDF ftGlyph newSize 0 maxDelta
       negDF = buildDF ftGlyph newSize maxDelta 0
    in VConst.zipWith (\a b ->
@@ -84,9 +85,9 @@ buildSDF ftGlyph@FTGlyph{..} newSize@(newWidth, newHeight) =
        in (fromIntegral . (+128) . max (-128) . min (127) . round . (* 10) $ distance)
     ) posDF negDF
 
-buildFont :: Int -> IO ()
-buildFont fontSize = do
-  glyphs <- getGlyphs fontSize "Testing some characters..."
+buildFont :: Int -> [Char] ->IO ()
+buildFont fontSize chars = do
+  glyphs <- getGlyphs fontSize chars -- "Testing some characters..."
   forM_ glyphs $ \(character, glyph@FTGlyph{..}) -> do
     let (width, height) = _size
     let noOfElements = width * height
