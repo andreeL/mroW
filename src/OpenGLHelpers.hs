@@ -18,10 +18,12 @@ module OpenGLHelpers (
     setFloat3,
     setMatrix33,
     createSceneTargetTexture,
-    createSceneTargetBuffer
+    createSceneTargetBuffer,
+    createFontTexture
 ) where
 
 import Control.Monad (forM_, when)
+import Data.Vector.Storable (Vector, unsafeWith)
 import Foreign
 import Foreign.C.String
 import Graphics.GL
@@ -136,6 +138,21 @@ createSceneTargetBuffer textureId = do
     glFramebufferTexture2D GL_FRAMEBUFFER GL_COLOR_ATTACHMENT0 GL_TEXTURE_2D textureId 0
     glBindFramebuffer GL_FRAMEBUFFER 0
     return frameBufferId
+
+createFontTexture :: GLsizei -> GLsizei -> Vector Word8 -> IO (GLuint)
+createFontTexture width height textureData = do
+    glActiveTexture GL_TEXTURE0
+    textureId <- alloca $ \ptr -> glGenVertexArrays 1 ptr >> peek ptr
+    glBindTexture GL_TEXTURE_2D textureId
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T (fromIntegral GL_REPEAT)
+    unsafeWith textureData $ \bufferPtr -> do
+        CHECK_GL glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_R8) width height 0 GL_RED GL_UNSIGNED_BYTE bufferPtr
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_BASE_LEVEL 0
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAX_LEVEL  0
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER (fromIntegral GL_LINEAR)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER (fromIntegral GL_LINEAR)
+    return textureId
 
 -- private stuff
 logString :: (Show b) => String -> Maybe b -> IO () 

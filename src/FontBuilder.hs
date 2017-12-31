@@ -1,7 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
-
 module FontBuilder
-  ( buildFont
+  ( Font
+  , buildFont
   , showFont -- only for debuging
   ) where
 
@@ -9,7 +9,7 @@ import Control.Arrow ((***))
 import Control.Monad (forM_, foldM)
 import Control.Monad.Primitive (PrimMonad, PrimState)
 import Control.Monad.ST (runST)
-import Data.Vector.Unboxed as VConst (Vector, (!), fromList, zipWith, unsafeFreeze, unsafeThaw)
+import Data.Vector.Unboxed as VConst (Vector, (!), fromList, zipWith, unsafeFreeze, unsafeThaw, generate)
 import Data.Vector.Unboxed.Mutable as VMutable (MVector, read, write, unsafeNew)
 import Data.Char (intToDigit)
 import Data.Word (Word8)
@@ -37,10 +37,16 @@ getSquareLength (dX, dY) = dX * dX + dY * dY
 getLength :: Vec2 -> Float
 getLength = sqrt . fromIntegral . getSquareLength
 
-buildFont :: Maybe String -> Int -> Int -> [Char] -> IO (Font, (Vec2, VConst.Vector Word8))
-buildFont maybeFontPath glyphHeight borderSize chars = do
-  ftGlyphs <- FTH.createGlyphs maybeFontPath (Nothing, glyphHeight - borderSize) chars
-  pure $ buildFontFromFtGlyphs glyphHeight borderSize ftGlyphs
+-- In a lot of these functions the values passed are simply assumed to be correct
+-- maybe I'll make it more robust in the future, and add some extra boundary checks or something
+-- However since no unsafe read/writes are made we should be pretty ok!
+
+buildFont :: Maybe String -> Int -> Int -> Int -> [Char] -> IO (Font, (Vec2, VConst.Vector Word8))
+buildFont maybeFontPath glyphHeight scaleDown borderSize chars = do
+  -- TODO: look if already generated and stored in some cache file, if it's not we generate the font and store it for faster startup times
+  -- this is a big issue when workin in GHCi!
+  ftGlyphs <- FTH.createGlyphs maybeFontPath (Nothing, (glyphHeight * scaleDown) - borderSize) chars
+  pure $ buildFontFromFtGlyphs glyphHeight scaleDown ftGlyphs
 
 showFont :: (Font, (Vec2, VConst.Vector Word8)) -> IO ()
 showFont (font, ((textureWidth, textureHeight), textureData)) = do
@@ -54,17 +60,17 @@ showFont (font, ((textureWidth, textureHeight), textureData)) = do
     putStrLn ""
 
   putStrLn $ show font
-  
+
 buildFontFromFtGlyphs :: Int -> Int -> [(Char, FTH.FTGlyph)] -> (Font, (Vec2, VConst.Vector Word8))
-buildFontFromFtGlyphs glyphHeight borderSize ftGlyphs = do
-  let fontSize@(glyphWidth, _) = (glyphHeight, glyphHeight) -- currently we only support square glyph sizes
+buildFontFromFtGlyphs glyphHeight scaleDown ftGlyphs = do
+  let glyphSize@(glyphWidth, _) = (glyphHeight, glyphHeight) -- currently we only support square glyph sizes
       integerSquareRoot = ceiling . sqrt . fromIntegral
       integerLog2 = ceiling . logBase 2 . fromIntegral
       textureHeight = (2^) . integerLog2 . (*glyphHeight) . integerSquareRoot . length $ ftGlyphs
       textureSize@(textureWidth, _) = (textureHeight, textureHeight) -- currently we only support square textures with the size beeing a power of two
-      glyphData = buildGlyphData fontSize textureSize ftGlyphs
-      font = Font fontSize . Map.fromList . fmap (\(char, glyph, _) -> (char, glyph)) $ glyphData
-      textureData = buildTextureData fontSize textureSize glyphData
+      glyphData = buildGlyphData glyphSize scaleDown textureSize ftGlyphs
+      font = Font glyphSize . Map.fromList . fmap (\(char, glyph, _) -> (char, glyph)) $ glyphData
+      textureData = buildTextureData glyphSize textureSize glyphData
    in (font, (textureSize, textureData))
 
 buildTextureData :: Vec2 -> Vec2 -> [(Char, Glyph, VConst.Vector Word8)] -> VConst.Vector Word8
@@ -78,16 +84,27 @@ buildTextureData (glyphWidth, glyphHeight) (textureWidth, textureHeight) glyphDa
         VMutable.write textureData (xPos + x + (yPos + y) * textureWidth) (getGlyphPixel x y)
   unsafeFreeze textureData
 
-buildGlyphData :: Vec2 -> Vec2 -> [(Char, FTH.FTGlyph)] -> [(Char, Glyph, VConst.Vector Word8)]
-buildGlyphData glyphSize@(glyphWidth, glyphHeight) (textureWidth, textureHeight) ftGlyphs =
+buildGlyphData :: Vec2 -> Int -> Vec2 -> [(Char, FTH.FTGlyph)] -> [(Char, Glyph, VConst.Vector Word8)]
+buildGlyphData glyphSize@(glyphWidth, glyphHeight) scaleDown (textureWidth, textureHeight) ftGlyphs =
   let gridPositions = [(x, y) | y <- [0, glyphHeight..textureHeight - 1], x <- [0, glyphWidth..textureWidth - 1]]
       buildGlyphTuple (imagePos, (char, ftGlyph)) =
-        let glyph = Glyph {
+        let fullSizeSDF = buildSDF (glyphWidth * scaleDown, glyphHeight * scaleDown) ftGlyph
+            glyph = Glyph {
           _bearing = FTH._bearing ftGlyph,
           _advance = FTH._advance ftGlyph,
           _imagePos = imagePos
-        } in (char, glyph, buildSDF glyphSize ftGlyph)
-    in fmap buildGlyphTuple $ zip gridPositions ftGlyphs -- TODO: this is easily parallelized if to slow
+        } in (char, glyph, scaledDownSDF glyphSize scaleDown fullSizeSDF)
+    -- TODO: this is easily parallelized if to slow
+    in fmap buildGlyphTuple $ zip gridPositions ftGlyphs
+
+scaledDownSDF :: Vec2 -> Int -> VConst.Vector Word8 -> VConst.Vector Word8
+scaledDownSDF size@(width, height) scaleDown originalData =
+  VConst.generate (uncurry (*) size) $ \i ->
+    let x = i `mod` width
+        y = i `div` width
+        js = [(x * scaleDown + u + (y * scaleDown + v) * width * scaleDown) | u <- [0..scaleDown-1], v <- [0..scaleDown-1]]
+        total = foldr (\j acc -> fromIntegral (originalData ! j) + acc) 0 js
+     in fromIntegral $ total `div` (scaleDown * scaleDown) -- avg
 
 buildSDF :: Vec2 -> FTH.FTGlyph -> VConst.Vector Word8
 buildSDF glyphSize ftGlyph =
@@ -95,8 +112,9 @@ buildSDF glyphSize ftGlyph =
       negDF = buildDF glyphSize maxDelta 0 ftGlyph
     in VConst.zipWith (\a b ->
       let lengthA = getLength $ a
-          distance = if lengthA == 0 then 1 - (getLength b) else lengthA
-        in (fromIntegral . (+128) . max (-128) . min (127) . round . (* 8) $ distance)
+          distance = lengthA - (getLength b)
+          scale = 8 -- figure out some sensible value for this
+       in (fromIntegral . (+128) . max (-128) . min (127) . round . (* scale) $ distance)
     ) posDF negDF
 
 buildDF :: Vec2 -> Int -> Int -> FTH.FTGlyph -> VConst.Vector Vec2

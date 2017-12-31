@@ -7,7 +7,8 @@ import           Control.Monad
 import           Data.Bits ((.|.))
 import           Data.Maybe
 import           Data.Foldable (toList)
-import           FontBuilder
+import           Data.Vector.Generic (convert)
+import           FontBuilder (Font, buildFont)
 import           Game
 import           Graphics.GL
 import qualified Graphics.UI.GLFW as GLFW
@@ -35,7 +36,8 @@ data GLState = GLState {
     sceneTargetTexture :: GLuint,
     sceneTargetBuffer :: GLuint,
     sceneProgram :: GLSLProgram,
-    postProcessingProgram :: GLSLProgram
+    postProcessingProgram :: GLSLProgram,
+    _font :: (Font, GLuint)
     }
 
 type GameEvent = GameState -> GameState
@@ -55,7 +57,12 @@ createGLState = do
     sceneTargetBuffer <- createSceneTargetBuffer sceneTargetTexture
     sceneProgram <- createGLSLProgram sceneProgramSource
     postProcessingProgram <- createGLSLProgram postProcessingProgramSource
-    return GLState{..}
+    let ascii = ['\32'..'\127'] -- we only care for the basic character set for now
+    (font, ((textureWidth, textureHeight), textureData)) <- buildFont Nothing 8 1 0 ('\0':ascii)
+    putStrLn $ "Font texture size is: " ++ show textureWidth ++ "x" ++ show textureHeight
+    fontTextureId <- createFontTexture (fromIntegral textureWidth) (fromIntegral textureHeight) (convert textureData)
+    let _font = (font, fontTextureId)
+    pure GLState{..}
 
 recreateGLSLPrograms :: GLState -> IO ()
 recreateGLSLPrograms GLState{..} = Control.Exception.catch (do
@@ -166,6 +173,9 @@ runLoop previousTime eventQueue gameState progGLState@GLState{..} window = do
                 glActiveTexture GL_TEXTURE0
                 glBindTexture GL_TEXTURE_2D sceneTargetTexture
                 setInt programId "sceneTexture" Nothing 0
+                glActiveTexture GL_TEXTURE1
+                glBindTexture GL_TEXTURE_2D (snd _font)
+                setInt programId "fontTexture" Nothing 1
                 setFloat2 programId "fMouse" Nothing 0 0
 
             -- post render
