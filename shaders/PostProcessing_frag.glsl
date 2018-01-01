@@ -44,14 +44,21 @@ vec4 getCharColor(vec4 charInfo)
     return blendOnto(edgeColor, color);
 }
 
+vec4 getNumberChar(vec4 numberCharInfo)
+{
+    return getCharColor(vec4(numberCharInfo.xyz, numberCharInfo.w + 17));
+}
+
 vec4 getTestText()
 {
     const float size = 0.1;
+    vec2 position = vec2(0.005, 0.85);
+   
     const vec4 text[4] = vec4[4](
-        vec4(0.005, 0.8  , size, 53), // T
-        vec4(0.04 , 0.785, size, 38), // E
-        vec4(0.08 , 0.79 , size, 52), // S
-        vec4(0.11 , 0.795, size, 53)  // T
+        vec4(position + vec2(0, 0.15) * size, size, 53), // T
+        vec4(position + vec2(0.35, 0) * size, size, 38), // E
+        vec4(position + vec2(0.75, 0.05) * size, size, 52), // S
+        vec4(position + vec2(1.05, 0.1) * size, size, 53)  // T
     );
 
     return blendOnto(
@@ -66,10 +73,31 @@ vec4 getTestText()
     );
 }
 
+vec4 getTestNumberText(vec4 numberCharInfo)
+{
+    vec2 position = numberCharInfo.xy;
+    float size = numberCharInfo.z;
+    float number = numberCharInfo.w;
+    vec4 textColor = vec4(0);
+    for (int i = 0; i < 10; ++i)
+    {
+        number = number / 10;
+        float numberChar = floor(fract(number) * 10);
+        if (i != 0 && numberChar == 0 && number < 1)
+            break;
+        textColor = blendOnto(textColor, getNumberChar(vec4(position, size, numberChar)));
+        position -= vec2(size * 0.5, 0);
+    }
+    return textColor;
+}
+
 void main()
 {
     vec4 sceneColor = texture(sceneTexture, screenUV);
-    vec4 testFontColor = getTestText();
+    vec4 testFontColor = blendOnto(
+        getTestText(),
+        getTestNumberText(vec4(0.85, 0.8, 0.15, fTime * 10))
+    );
     vec4 finalColor = blendOnto(sceneColor, testFontColor);
     gl_FragColor = pow(finalColor, vec4(1.0/2.2)); // gamma corrected
 }
