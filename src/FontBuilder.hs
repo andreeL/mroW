@@ -156,7 +156,7 @@ createBinaryMask (glyphWidth, glyphHeight) zeroVal oneVal FTH.FTGlyph{..} =
       getVal x y = getGlyphPixel (x - offsetX) (y - offsetY)
       getGlyphPixel x y =
         let val = if (x >= 0 && x < sourceWidth && y >= 0 && y < sourceHeight)
-                    then if _image ! (x + y * sourceWidth) < 128 then oneVal else zeroVal
+                    then if _image ! (x + (sourceHeight - 1 - y) * sourceWidth) < 128 then oneVal else zeroVal
                     else oneVal
          in (val, val)
 
