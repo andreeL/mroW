@@ -43,8 +43,8 @@ data GLState = GLState {
 type GameEvent = GameState -> GameState
 type EventQueue = Control.Concurrent.STM.TQueue GameEvent
 
-sceneProgramSource = ("shaders/Fullscreen_vert.glsl", "shaders/Main_frag.glsl") :: (FilePath, FilePath)
-postProcessingProgramSource = ("shaders/Fullscreen_vert.glsl", "shaders/PostProcessing_frag.glsl") :: (FilePath, FilePath)
+sceneProgramSource = ("shaders/Scene.vert", "shaders/Scene.frag") :: (FilePath, FilePath)
+postProcessingProgramSource = ("shaders/HUD.vert", "shaders/HUD.frag") :: (FilePath, FilePath)
 defaultWindowSize = (960, 540) :: (GLsizei, GLsizei)
 --defaultWindowSize = (1728, 972) :: (GLsizei, GLsizei)
 
