@@ -8,7 +8,7 @@ import           Data.Bits ((.|.))
 import           Data.Maybe
 import           Data.Foldable (toList)
 import           Data.Vector.Generic (convert)
-import           FontBuilder (Font, buildFont)
+import           FontBuilder (Font, createHUDFont)
 import           Game
 import           Graphics.GL
 import qualified Graphics.UI.GLFW as GLFW
@@ -57,8 +57,7 @@ createGLState = do
     sceneTargetBuffer <- createSceneTargetBuffer sceneTargetTexture
     sceneProgram <- createGLSLProgram sceneProgramSource
     postProcessingProgram <- createGLSLProgram postProcessingProgramSource
-    let ascii = ['\32'..'\127'] -- we only care for the basic character set for now
-    (font, ((textureWidth, textureHeight), textureData)) <- buildFont Nothing 8 1 0 ('\0':ascii)
+    (font, ((textureWidth, textureHeight), textureData)) <- createHUDFont
     putStrLn $ "Font texture size is: " ++ show textureWidth ++ "x" ++ show textureHeight
     fontTextureId <- createFontTexture (fromIntegral textureWidth) (fromIntegral textureHeight) (convert textureData)
     let _font = (font, fontTextureId)

@@ -1,20 +1,24 @@
 {-# LANGUAGE RecordWildCards #-}
 module FontBuilder
   ( Font
-  , buildFont
+  , createHUDFont
+  , createFont
   , showFont -- only for debuging
   ) where
 
 import Control.Arrow ((***))
-import Control.Monad (forM_, foldM)
+import Control.Exception (tryJust)
+import Control.Monad (forM_, foldM, guard)
 import Control.Monad.Primitive (PrimMonad, PrimState)
 import Control.Monad.ST (runST)
+import Data.Maybe (listToMaybe)
 import Data.Vector.Unboxed as VConst (Vector, (!), fromList, zipWith, unsafeFreeze, unsafeThaw, generate)
 import Data.Vector.Unboxed.Mutable as VMutable (MVector, read, write, unsafeNew)
 import Data.Char (intToDigit)
 import Data.Word (Word8)
 import qualified Data.Map as Map (Map, fromList)
 import qualified FreeTypeHelpers as FTH (FTGlyph(..), createGlyphs)
+import System.IO.Error (isDoesNotExistError)
 
 type Vec2 = (Int, Int)
 
@@ -22,13 +26,14 @@ data Glyph = Glyph {
   _bearing :: Vec2,
   _advance :: Int,
   _imagePos :: Vec2
-} deriving (Show)
+} deriving (Show, Read)
 
 data Font = Font {
   _size :: Vec2,
   _glyphs :: Map.Map Char Glyph
-} deriving (Show)
+} deriving (Show, Read)
 
+type FontAndTexture = (Font, (Vec2, VConst.Vector Word8))
 maxDelta = 10000 :: Int
 
 getSquareLength :: Vec2 -> Int
@@ -41,14 +46,36 @@ getLength = sqrt . fromIntegral . getSquareLength
 -- maybe I'll make it more robust in the future, and add some extra boundary checks or something
 -- However since no unsafe read/writes are made we should be pretty ok!
 
-buildFont :: Maybe String -> Int -> Int -> Int -> [Char] -> IO (Font, (Vec2, VConst.Vector Word8))
-buildFont maybeFontPath glyphHeight scaleDown borderSize chars = do
-  -- TODO: look if already generated and stored in some cache file, if it's not we generate the font and store it for faster startup times
-  -- this is a big issue when workin in GHCi!
+createHUDFont :: IO FontAndTexture
+createHUDFont = do
+  let fontCacheFilepath = "hudFont.tmp"
+  cachedFont <- getFontFromFile fontCacheFilepath
+  case cachedFont of
+    Just font -> putStrLn "Using cached font!" *> pure font
+    Nothing -> do
+      let ascii = ['\32'..'\127'] -- we only care for the basic character set for now
+      putStrLn "Generating font, this might take a while... (do NOT do this in GHCi, it can crash)"
+      -- TODO: WARNING, GHCi crashes when trying to build fonts this highres... this is probably a good place to start optimizing :P
+      font <- createFont Nothing 32 16 0 ('\0':ascii)
+      writeFontToFile fontCacheFilepath font
+      pure font
+
+getFontFromFile :: String -> IO (Maybe FontAndTexture)
+getFontFromFile filepath = do
+  fontCacheContent <- tryJust (guard . isDoesNotExistError) (readFile filepath)
+  pure $ case fontCacheContent of
+    Left _ -> Nothing
+    Right content -> fmap fst . listToMaybe . reads $ content
+
+writeFontToFile :: String -> FontAndTexture -> IO ()
+writeFontToFile filepath fontAndTexture = writeFile filepath $ show fontAndTexture
+
+createFont :: Maybe String -> Int -> Int -> Int -> [Char] -> IO FontAndTexture
+createFont maybeFontPath glyphHeight scaleDown borderSize chars = do
   ftGlyphs <- FTH.createGlyphs maybeFontPath (Nothing, (glyphHeight * scaleDown) - borderSize) chars
   pure $ buildFontFromFtGlyphs glyphHeight scaleDown ftGlyphs
 
-showFont :: (Font, (Vec2, VConst.Vector Word8)) -> IO ()
+showFont :: FontAndTexture -> IO ()
 showFont (font, ((textureWidth, textureHeight), textureData)) = do
   forM_ [0..textureHeight - 1] $ \y -> do
     forM_ [0..textureWidth - 1] $ \x -> do
@@ -61,7 +88,7 @@ showFont (font, ((textureWidth, textureHeight), textureData)) = do
 
   putStrLn $ show font
 
-buildFontFromFtGlyphs :: Int -> Int -> [(Char, FTH.FTGlyph)] -> (Font, (Vec2, VConst.Vector Word8))
+buildFontFromFtGlyphs :: Int -> Int -> [(Char, FTH.FTGlyph)] -> FontAndTexture
 buildFontFromFtGlyphs glyphHeight scaleDown ftGlyphs = do
   let glyphSize@(glyphWidth, _) = (glyphHeight, glyphHeight) -- currently we only support square glyph sizes
       integerSquareRoot = ceiling . sqrt . fromIntegral
