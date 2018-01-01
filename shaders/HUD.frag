@@ -31,17 +31,16 @@ vec4 getCharColor(vec4 charInfo)
 {
     const float signedDistance = getDistanceToChar(charInfo);
     
-    const float center = 0.45;
-    const float extent = 0.1;
-    const float colorAlpha = smoothstep(center + extent, center - extent, signedDistance);
-    const vec4 color = vec4(0.8, 0.7, 0.1, clamp(colorAlpha, 0, 1));
-
+    const float innerCenter = 0.65;
     const float edgeCenter = 0.85;
-    const float edgeExtent = 0.1;
-    const float edgeColorAlpha = smoothstep(edgeCenter + edgeExtent, edgeCenter - edgeExtent, signedDistance);
-    const vec4 edgeColor = vec4(0.3, 0.0, 0.01, clamp(edgeColorAlpha, 0, 1));
-
-    return blendOnto(edgeColor, color);
+    const float extent = 0.1;
+    const float edgeColorAlpha = smoothstep(edgeCenter + extent, edgeCenter - extent, signedDistance);
+    const float innerColorAlpha = smoothstep(innerCenter + extent, innerCenter - extent, signedDistance);
+    const vec4 color = blendOnto(
+        vec4(0.3, 0.0, 0.01, 1),
+        vec4(0.8, 0.7, 0.1, innerColorAlpha)
+        );
+    return vec4(color.rgb, clamp(edgeColorAlpha, 0, 1));
 }
 
 vec4 getNumberChar(vec4 numberCharInfo)
