@@ -11,7 +11,7 @@ module Camera
   , createFreeCamera
   ) where
 
-import Behaviour (Behaviour(..), bScan, bScanFlip)
+import Behaviour (Behaviour(..), bScan)
 import Control.Arrow (Arrow(..), returnA)
 import Common
 import Linear (V2(..), V3(..), M33(..), normalize, cross, axisAngle, fromQuaternion, (^+^), (^*))
@@ -42,8 +42,8 @@ createStaticCamera placement = pure placement
 createCinematicCamera :: Position -> Camera
 createCinematicCamera position =
   let updatePosition CameraInput{..} = followBehind _deltaSeconds _target
-  in proc cameraInput@CameraInput{..} -> do
-    nextPosition <- bScanFlip updatePosition position -< cameraInput
+   in proc cameraInput@CameraInput{..} -> do
+    nextPosition <- bScan (flip updatePosition) position -< cameraInput
     returnA -< (nextPosition, lookAt _target nextPosition)
 
 createFreeCamera :: Camera
@@ -51,7 +51,7 @@ createFreeCamera = arr $ \CameraInput{..} ->
   let eyePosition = getEyePosition _time
       rotationX = axisAngle (V3 0 1 0) (realToFrac (-(fst _mouseXY)) / 50)
       rotationY = axisAngle (V3 1 0 0) (realToFrac (-(snd _mouseXY)) / 50)
-    in (eyePosition, fromQuaternion (rotationY * rotationX))
+   in (eyePosition, fromQuaternion (rotationY * rotationX))
 
 follow :: DeltaTime -> Position -> Position -> Position
 follow deltaTime target origin =

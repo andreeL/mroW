@@ -72,7 +72,7 @@ vec4 getTestText()
     );
 }
 
-vec4 getTestNumberText(vec4 numberCharInfo)
+vec4 getNumberText(vec4 numberCharInfo)
 {
     vec2 position = numberCharInfo.xy;
     float size = numberCharInfo.z;
@@ -82,9 +82,9 @@ vec4 getTestNumberText(vec4 numberCharInfo)
     {
         number = number / 10;
         float numberChar = floor(fract(number) * 10);
-        if (i != 0 && numberChar == 0 && number < 1)
-            break;
         textColor = blendOnto(textColor, getNumberChar(vec4(position, size, numberChar)));
+        if (number < 1)
+            break;
         position -= vec2(size * 0.5, 0);
     }
     return textColor;
@@ -95,7 +95,7 @@ void main()
     vec4 sceneColor = texture(sceneTexture, screenUV);
     vec4 testFontColor = blendOnto(
         getTestText(),
-        getTestNumberText(vec4(0.85, 0.8, 0.15, fTime * 10))
+        getNumberText(vec4(0.85, 0.8, 0.15, fTime * 10))
     );
     vec4 finalColor = blendOnto(sceneColor, testFontColor);
     gl_FragColor = pow(finalColor, vec4(1.0/2.2)); // gamma corrected
