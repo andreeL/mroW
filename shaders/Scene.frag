@@ -7,13 +7,13 @@ uniform vec2 fMouse = ivec2(0, 0);
 uniform vec3 eyePosition;
 uniform mat3 eyeRotation;
 uniform vec3 playerPosition;
+uniform vec4[100] objects;
 
-float epsilon = 0.005;
-float maxDistance = 30.f; // TODO: set this to something sensible
+const float epsilon = 0.005;
+const float maxDistance = 30.f; // TODO: set this to something sensible
 
-float sphereRadius = 0.125 + 0.05 * sin(fTime * 2.1);
 vec3 qubeDisplacement = vec3(0.5, 0, fTime * -3);
-vec3 qubeHalfDistance = vec3(0.125, 0.025, 0.125) * 2;
+const vec3 qubeHalfDistance = vec3(0.125, 0.025, 0.125);
 
 struct Scene
 {
@@ -21,38 +21,58 @@ struct Scene
     vec3 closestCubePosition;
     float mCubeDistance;
 
-    // closest sphere
-    vec3 closestSpherePosition;
-    float mSphereDistance;
-
     // surrounding worm hole (cylinder)
     float mCylinderDistance;
 
     // player
     float mPlayerDistance;
+
+    // the closest custom object
+    int mClosestObjectId;
+    float mClosestObjectDistance;
 };
+
+void getClosestObject(in vec3 position, out int closestObjectId, out float closestObjectDistance)
+{
+    closestObjectId = int(min(max(0, position.z + float(objects.length() + 1) / 2.0), objects.length() - 1)) + 0;
+    const vec4 object = objects[closestObjectId];
+    const vec3 objectPosition = object.xyz;
+
+    switch (int(object.w))
+    {
+        case 1:
+            closestObjectDistance = length(objectPosition - position) - 0.5;
+            break;
+        
+        case 2:
+            closestObjectDistance = length(objectPosition - position) - 0.45;
+            break;
+
+        default:
+            closestObjectDistance = 1.0 / 0.000001; // I want to do 1/0, but that gives an annoying warning
+    }
+}
 
 void getScene(in vec3 position, out Scene scene)
 {
     scene.closestCubePosition = fract(position + qubeDisplacement) - 0.5;
     scene.mCubeDistance = length(max(abs(scene.closestCubePosition) - qubeHalfDistance,0.0));
 
-    scene.closestSpherePosition = fract(position) - 0.5;
-    scene.mSphereDistance = length(scene.closestSpherePosition) - sphereRadius;
-
     float cylinderExtent = 2.0;
     scene.mCylinderDistance = cylinderExtent - length(position.xy);
 
     const float playerRadious = 0.5;
     scene.mPlayerDistance = length(playerPosition - position) - playerRadious;
+
+    getClosestObject(position, scene.mClosestObjectId, scene.mClosestObjectDistance);
 }
 
 float getMinimumDistance(in Scene scene)
 {
     return min(
-        min(scene.mCubeDistance, scene.mSphereDistance),
-        min(scene.mCylinderDistance, scene.mPlayerDistance)
-        );
+            min(scene.mCubeDistance, scene.mClosestObjectDistance),
+            min(scene.mCylinderDistance, scene.mPlayerDistance)
+    );
 }
 
 float getDistance(in vec3 position)
@@ -84,18 +104,43 @@ float getAmbientOcclusion(in vec3 position, in vec3 normal)
     return clamp(4 * distance, 0.0, 1.0);
 }
 
+void getObjectMaterial(in int objectId, in vec3 position, out vec3 normal, out vec3 albedo, out float roughness, out float metallic)
+{
+    vec4 object = objects[objectId];
+    vec3 objectPosition;
+    normal = getNormal(position);
+    switch (int(object.w))
+    {
+        case 1:
+            albedo = vec3(0.8, 0.2, 0.7);
+            roughness = 0.8;
+            metallic = 0;
+            break;
+
+        case 2:
+            albedo = vec3(0.3, 0.6, 0.6);
+            roughness = 0.7;
+            metallic = 0;
+            break;
+
+        default: // we never get here
+            albedo = vec3(1);
+            roughness = 1;
+            metallic = 0;
+            break;
+    }
+}
+
 void getMaterial(in vec3 position, out vec3 normal, out vec3 albedo, out float roughness, out float metallic, out float ambientOcclusion)
 {
     Scene scene;
     getScene(position, scene);
     float closest = getMinimumDistance(scene);
-    if (closest == scene.mSphereDistance)
+    if (closest == scene.mClosestObjectDistance)
     {
-        normal = normalize(scene.closestSpherePosition);
-        albedo = vec3(0.8, 0.5, 0.3);
-        roughness = 0.66;
-        metallic = 1;
-    } else
+        getObjectMaterial(scene.mClosestObjectId, position, normal, albedo, roughness, metallic);
+    }
+    else
     {
         normal = getNormal(position);
         if (closest == scene.mCylinderDistance)
@@ -111,10 +156,10 @@ void getMaterial(in vec3 position, out vec3 normal, out vec3 albedo, out float r
             roughness = 0.4;
             metallic = 0;
         }
-        else //if (closest == scene.mPlayerDistance)
+        else // if (closest == scene.mPlayerDistance)
         {
-            albedo = vec3(1, 0, 0);
-            roughness = 0.25;
+            albedo = vec3(0.71, 0.71, 0.71);
+            roughness = 0.15;
             metallic = 1;
         }
     }

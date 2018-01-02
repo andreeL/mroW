@@ -10,6 +10,7 @@ import           Data.Foldable (toList)
 import           Data.Vector.Generic (convert)
 import           FontBuilder (Font, createHUDFont)
 import           Game
+import           GHC.Exts (sortWith)
 import           Graphics.GL
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Linear as L
@@ -119,6 +120,43 @@ runQueuedEvents eventQueue gameState = do
         Just event -> runQueuedEvents eventQueue (event gameState)
         Nothing -> return gameState
 
+-- this is just tempoary
+testObjects :: Double -> [L.V4 Float]
+testObjects time =
+    let getZ offset =
+            let z = ((realToFrac time) * 3 + offset)
+             in z - (fromIntegral . round $ z / 60) * 60
+     in [ L.V4 ( 1) ( 1) (getZ 0) 1.0,
+          L.V4 (-1) ( 1) (getZ 4) 2.0,
+          L.V4 ( 1) (-1) (getZ 8) 2.0,
+          L.V4 (-1) (-1) (getZ 12) 1.0,
+          L.V4 ( 0) ( 0) (getZ 16) 1.0,
+          L.V4 ( 1) ( 1) (getZ 20) 1.0,
+          L.V4 (-1) ( 1) (getZ 24) 2.0,
+          L.V4 (-1) ( 1) (getZ 28) 2.0,
+          L.V4 (-1) ( 1) (getZ 32) 2.0,
+          L.V4 ( 1) ( 1) (getZ 36) 1.0,
+          L.V4 (-1) ( 1) (getZ 40) 2.0,
+          L.V4 ( 1) (-1) (getZ 44) 2.0,
+          L.V4 (-1) (-1) (getZ 48) 2.0,
+          L.V4 ( 0) ( 0) (getZ 52) 1.0
+        ]
+
+buildClosestObjectList :: Int -> [L.V4 Float] -> [L.V4 Float]
+buildClosestObjectList len objects =
+    let halfLength = len `div` 2
+        indexes = [-halfLength..len - halfLength]
+        zOrderedObjects = sortWith (\(L.V4 _ _ z _) -> z) $ objects
+     in build indexes zOrderedObjects
+    where zDistance i (L.V4 _ _ z _) = abs (fromIntegral i - z)
+          build :: [Int] -> [L.V4 Float] -> [L.V4 Float]
+          build [] _ = []
+          build (x:xs) all@(y:[]) = y:build xs all
+          build (x:xs) all@(y:y2:ys) =
+            if (zDistance x y < zDistance x y2)
+                then y:build xs all
+                else y2:build xs (y2:ys)
+          
 runLoop :: Double -> EventQueue -> GameState -> GLState -> GLFW.Window -> IO ()
 runLoop previousTime eventQueue gameState progGLState@GLState{..} window = do
     GLFW.pollEvents
@@ -166,6 +204,8 @@ runLoop previousTime eventQueue gameState progGLState@GLState{..} window = do
             withFullscreenGLSLProgram sceneTargetBuffer sceneTargetSize sceneProgram $ \programId -> do
                 let L.V3 pX pY pZ = playerPosition
                 setFloat3 programId "playerPosition" Nothing (realToFrac pX) (realToFrac pY) (realToFrac pZ)
+                let closestObjects = buildClosestObjectList 100 (testObjects time)
+                setFloat4Array programId "objects" Nothing (fmap realToFrac . concatMap toList $ closestObjects)
 
             -- copy scene to main buffer with post processing
             withFullscreenGLSLProgram 0 (fromIntegral width, fromIntegral height) postProcessingProgram $ \programId -> do

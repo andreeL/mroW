@@ -16,6 +16,7 @@ module OpenGLHelpers (
     setFloat,
     setFloat2,
     setFloat3,
+    setFloat4Array,
     setMatrix33,
     createSceneTargetTexture,
     createSceneTargetBuffer,
@@ -107,6 +108,14 @@ setFloat2 oId name mLoc x y = withUniformLocation oId name mLoc (\loc -> glUnifo
 setFloat3 :: GLuint -> String -> Maybe GLint -> GLfloat -> GLfloat -> GLfloat -> IO (GLint)
 setFloat3 oId name mLoc x y z = withUniformLocation oId name mLoc (\loc -> glUniform3f loc x y z)
 
+setFloat4Array :: GLuint -> String -> Maybe GLint -> [GLfloat] -> IO (GLint)
+setFloat4Array oId name mLoc array = do
+    withUniformLocation oId name mLoc $ \loc -> do
+        withArrayLen array $ \len arrayPtr -> do
+            if (len `mod` 4 == 0)
+                then glUniform4fv loc (fromIntegral $ len `div` 4) arrayPtr
+                else logString "called setFloat4Array with wrong length" (Just len)
+                
 setMatrix33 :: GLuint -> String -> Maybe GLint -> [GLfloat] -> IO (GLint)
 setMatrix33 oId name mLoc matrix = do
     withUniformLocation oId name mLoc $ \loc -> do
