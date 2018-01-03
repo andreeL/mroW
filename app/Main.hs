@@ -99,6 +99,7 @@ main = do
                         when (key == GLFW.Key'Escape) $ GLFW.setWindowShouldClose window True
                         when (key == GLFW.Key'F1) $ atomically $ writeTQueue eventQueue $ snd . setDirtyShadersFlag
                         when (key == GLFW.Key'F2) $ atomically $ writeTQueue eventQueue $ snd . useNextCameraMode
+                        when (key == GLFW.Key'Space) $ atomically $ writeTQueue eventQueue $ snd . addPoints 1
 
                     when (key == GLFW.Key'W) $ atomically $ writeTQueue eventQueue $ snd . setOrRemove actionUp "" pressed
                     when (key == GLFW.Key'A) $ atomically $ writeTQueue eventQueue $ snd . setOrRemove actionLeft "" pressed
@@ -217,6 +218,7 @@ runLoop previousTime eventQueue gameState progGLState@GLState{..} window = do
                 glBindTexture GL_TEXTURE_2D (snd _font)
                 setInt programId "fontTexture" Nothing 1
                 setFloat2 programId "fMouse" Nothing 0 0
+                setInt programId "gPoints" Nothing (fromIntegral . getPoints $ gameState'')
 
             -- post render
             GLFW.swapBuffers window

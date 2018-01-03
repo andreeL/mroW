@@ -21,6 +21,8 @@ module Game (
     extractDirtyShadersFlag,
     setMousePos,
     getMousePos,
+    addPoints,
+    getPoints,
     setVariable,
     removeVariable,
     getVariable,
@@ -30,10 +32,11 @@ module Game (
 import Camera (Camera, CameraInput(..), createStaticCamera, createCinematicCamera, createFreeCamera, getBehaviour)
 import Common
 import Data.Map as M
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, fromMaybe)
 import Lens.Micro.Platform
 import Linear as L
 import Player (Player, PlayerInput(..), createPlayer)
+import Text.Read (readMaybe)
 
 data CameraMode = StaticCamera | CinematicCamera | FreeCamera deriving (Bounded, Enum, Eq)
 nextCameraMode :: CameraMode -> CameraMode
@@ -51,6 +54,7 @@ actionUp = "up" :: String
 actionLeft = "left" :: String
 actionDown = "down" :: String
 actionRight = "right" :: String
+pointsVariable = "points" :: String
 
 type VariableName = String
 type VariableValue = String
@@ -120,6 +124,15 @@ setMousePos newMousePos gameState = ((), (debugState.mousePos.~ newMousePos $ ga
 
 getMousePos :: GameState -> (Double, Double)
 getMousePos = view (debugState.mousePos)
+
+addPoints :: Int -> GameState -> ((), GameState)
+addPoints points gameState =
+    let currentPoints = getPoints gameState
+        newPoints = currentPoints + points
+     in setVariable pointsVariable (show newPoints) gameState
+
+getPoints :: GameState -> Int
+getPoints gameState = fromMaybe 0 (readMaybe =<< getVariable pointsVariable gameState)
 
 setVariable :: VariableName -> VariableValue -> GameState -> ((), GameState)
 setVariable variableName variableValue gameState =

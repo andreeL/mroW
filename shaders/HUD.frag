@@ -4,6 +4,7 @@ varying vec2 screenUV;
 varying vec2 screenXY;
 uniform float fTime = 0;
 uniform vec2 fMouse = ivec2(0, 0);
+uniform int gPoints = 0;
 
 uniform sampler2D sceneTexture;
 uniform sampler2D fontTexture;
@@ -95,7 +96,7 @@ void main()
     vec4 sceneColor = texture(sceneTexture, screenUV);
     vec4 testFontColor = blendOnto(
         getTestText(),
-        getNumberText(vec4(0.85, 0.8, 0.15, fTime * 10))
+        getNumberText(vec4(0.85, 0.8, 0.15, float(gPoints)))
     );
     vec4 finalColor = blendOnto(sceneColor, testFontColor);
     gl_FragColor = pow(finalColor, vec4(1.0/2.2)); // gamma corrected
