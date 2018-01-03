@@ -51,6 +51,9 @@ vec4 getNumberChar(vec4 numberCharInfo)
 
 vec4 getTestText()
 {
+    if (screenUV.x > 0.20 || screenUV.y < 0.85 || screenUV.y > 0.97)
+        return vec4(0);
+
     const float size = 0.1;
     vec2 position = vec2(0.005, 0.85);
    
@@ -75,6 +78,9 @@ vec4 getTestText()
 
 vec4 getNumberText(vec4 numberCharInfo)
 {
+    if (screenUV.x < 0.5 || screenUV.y < 0.8 || screenUV.y > 0.95)
+        return vec4(0);
+
     vec2 position = numberCharInfo.xy;
     float size = numberCharInfo.z;
     float number = numberCharInfo.w;
