@@ -1,6 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main where
 
+import           Behaviour (Behaviour(..))
 import           Common (DeltaTime(..))
 import           Control.Concurrent.STM
 import qualified Control.Exception
@@ -112,15 +113,8 @@ main = do
                     )
 
                 time <- fmap (fromMaybe 0) GLFW.getTime
-                runLoop time eventQueue createGameState progGLState window
+                runLoop time eventQueue (createGame createGameState) progGLState window
                 GLFW.destroyWindow window
-
-runQueuedEvents :: EventQueue -> GameState -> IO GameState
-runQueuedEvents eventQueue gameState = do
-    maybeEvent <- atomically $ tryReadTQueue eventQueue
-    case maybeEvent of
-        Just event -> runQueuedEvents eventQueue (event gameState)
-        Nothing -> return gameState
 
 -- this is just tempoary
 testObjects :: Double -> [L.V4 Float]
@@ -158,9 +152,9 @@ buildClosestObjectList len objects =
             if (zDistance x y < zDistance x y2)
                 then y:build xs all
                 else y2:build xs (y2:ys)
-          
-runLoop :: Double -> EventQueue -> GameState -> GLState -> GLFW.Window -> IO ()
-runLoop previousTime eventQueue gameState progGLState@GLState{..} window = do
+
+runLoop :: Double -> EventQueue -> Game -> GLState -> GLFW.Window -> IO ()
+runLoop previousTime eventQueue game progGLState@GLState{..} window = do
     GLFW.pollEvents
     windowShouldClose <- GLFW.windowShouldClose window
     case windowShouldClose of
@@ -169,57 +163,75 @@ runLoop previousTime eventQueue gameState progGLState@GLState{..} window = do
             time <- fmap (fromMaybe 0) GLFW.getTime
             let deltaTime = DeltaTime {getSeconds = realToFrac . max 0 . min 1 $ (time - previousTime)}
 
+            let handleGameEvent :: Event -> Game -> IO Game
+                handleGameEvent event game =
+                    let (program, game') = getBehaviour game $ event
+                    in runProgram (time, progGLState, window) program *> pure game'
+               
+            let handleQueuedEvents :: EventQueue -> Game -> IO Game
+                handleQueuedEvents eventQueue game = do
+                    maybeEvent <- atomically $ tryReadTQueue eventQueue
+                    case maybeEvent of
+                        Just event -> do
+                            game' <- handleGameEvent (UpdateGameStateEvent event) game
+                            handleQueuedEvents eventQueue game'
+                        Nothing -> return game
+
             -- handle events
-            ((eyePosition, eyeRotation), playerPosition, gameState') <- fmap (run time deltaTime) $ runQueuedEvents eventQueue gameState
+            game' <- handleQueuedEvents eventQueue game >>=
+                handleGameEvent (TickEvent time deltaTime) >>=
+                handleGameEvent RenderEvent
 
-            -- update state ?
-            let (shadersAreDirty, gameState'') = extractDirtyShadersFlag gameState'
-            when (shadersAreDirty) $ do
-                recreateGLSLPrograms progGLState
-            let (mouseX, mouseY) = getMousePos gameState''
+            runLoop time eventQueue game' progGLState window
 
-            -- pre render
-            (width, height) <- GLFW.getFramebufferSize window
-            let aspectRatio = fromIntegral width / fromIntegral height
-            let fov = if aspectRatio > 1.0 then (aspectRatio, 1.0) else (1.0, 1 / aspectRatio)
-            let withFullscreenGLSLProgram targetBuffer (width, height) program setupAction = do
-                    -- for now we just treat the VAO as a GL requirement, and ignore it
-                    glBindVertexArray dummyVAO
-                    glBindVertexBuffer 0 emptyBO 0 0
+runProgram :: (Double, GLState, GLFW.Window) -> Program -> IO ()
+runProgram _ NoOp = pure ()
+runProgram (time, progGLState@GLState{..}, window) (Render (shadersAreDirty, (eyePosition, eyeRotation), playerPosition, gamestate)) = do
+    when (shadersAreDirty) $ do
+        recreateGLSLPrograms progGLState
+    let (mouseX, mouseY) = getMousePos gamestate
 
-                    glBindFramebuffer GL_FRAMEBUFFER targetBuffer
-                    glDisable GL_DEPTH_TEST
-                    glViewport 0 0 width height
+    -- pre render
+    (width, height) <- GLFW.getFramebufferSize window
+    let aspectRatio = fromIntegral width / fromIntegral height
+    let fov = if aspectRatio > 1.0 then (aspectRatio, 1.0) else (1.0, 1 / aspectRatio)
+    let withFullscreenGLSLProgram targetBuffer (width, height) program setupAction = do
+            -- for now we just treat the VAO as a GL requirement, and ignore it
+            glBindVertexArray dummyVAO
+            glBindVertexBuffer 0 emptyBO 0 0
 
-                    let programId = getProgramId program
-                    glUseProgram programId
-                    setFloat programId "fTime" Nothing (realToFrac time)
-                    setFloat2 programId "fFov" Nothing (fst fov) (snd fov)
-                    setFloat2 programId "fMouse" Nothing (realToFrac mouseX) (realToFrac mouseY)
-                    let L.V3 eyeX eyeY eyeZ = eyePosition
-                    setFloat3 programId "eyePosition" Nothing (realToFrac eyeX) (realToFrac eyeY) (realToFrac eyeZ)
-                    setMatrix33 programId "eyeRotation" Nothing (fmap realToFrac . join . fmap toList . toList $ eyeRotation)
-                    setupAction programId
-                    glDrawArrays GL_TRIANGLES 0 3
+            glBindFramebuffer GL_FRAMEBUFFER targetBuffer
+            glDisable GL_DEPTH_TEST
+            glViewport 0 0 width height
 
-            -- render scene
-            withFullscreenGLSLProgram sceneTargetBuffer sceneTargetSize sceneProgram $ \programId -> do
-                let L.V3 pX pY pZ = playerPosition
-                setFloat3 programId "playerPosition" Nothing (realToFrac pX) (realToFrac pY) (realToFrac pZ)
-                let closestObjects = buildClosestObjectList 100 (testObjects time)
-                setFloat4Array programId "objects" Nothing (fmap realToFrac . concatMap toList $ closestObjects)
+            let programId = getProgramId program
+            glUseProgram programId
+            setFloat programId "fTime" Nothing (realToFrac time)
+            setFloat2 programId "fFov" Nothing (fst fov) (snd fov)
+            setFloat2 programId "fMouse" Nothing (realToFrac mouseX) (realToFrac mouseY)
+            let L.V3 eyeX eyeY eyeZ = eyePosition
+            setFloat3 programId "eyePosition" Nothing (realToFrac eyeX) (realToFrac eyeY) (realToFrac eyeZ)
+            setMatrix33 programId "eyeRotation" Nothing (fmap realToFrac . join . fmap toList . toList $ eyeRotation)
+            setupAction programId
+            glDrawArrays GL_TRIANGLES 0 3
 
-            -- copy scene to main buffer with post processing
-            withFullscreenGLSLProgram 0 (fromIntegral width, fromIntegral height) postProcessingProgram $ \programId -> do
-                glActiveTexture GL_TEXTURE0
-                glBindTexture GL_TEXTURE_2D sceneTargetTexture
-                setInt programId "sceneTexture" Nothing 0
-                glActiveTexture GL_TEXTURE1
-                glBindTexture GL_TEXTURE_2D (snd _font)
-                setInt programId "fontTexture" Nothing 1
-                setFloat2 programId "fMouse" Nothing 0 0
-                setInt programId "gPoints" Nothing (fromIntegral . getPoints $ gameState'')
+    -- render scene
+    withFullscreenGLSLProgram sceneTargetBuffer sceneTargetSize sceneProgram $ \programId -> do
+        let L.V3 pX pY pZ = playerPosition
+        setFloat3 programId "playerPosition" Nothing (realToFrac pX) (realToFrac pY) (realToFrac pZ)
+        let closestObjects = buildClosestObjectList 100 (testObjects time)
+        setFloat4Array programId "objects" Nothing (fmap realToFrac . concatMap toList $ closestObjects)
 
-            -- post render
-            GLFW.swapBuffers window
-            runLoop time eventQueue gameState'' progGLState window
+    -- copy scene to main buffer with post processing
+    withFullscreenGLSLProgram 0 (fromIntegral width, fromIntegral height) postProcessingProgram $ \programId -> do
+        glActiveTexture GL_TEXTURE0
+        glBindTexture GL_TEXTURE_2D sceneTargetTexture
+        setInt programId "sceneTexture" Nothing 0
+        glActiveTexture GL_TEXTURE1
+        glBindTexture GL_TEXTURE_2D (snd _font)
+        setInt programId "fontTexture" Nothing 1
+        setFloat2 programId "fMouse" Nothing 0 0
+        setInt programId "gPoints" Nothing (fromIntegral . getPoints $ gamestate)
+
+    -- post render
+    GLFW.swapBuffers window

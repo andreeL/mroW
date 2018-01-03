@@ -1,6 +1,8 @@
 module Behaviour
   ( Behaviour(..)
   , bScan
+  , bScanSplit
+  , bEval
   ) where
 
 import Control.Applicative (Applicative(..))
@@ -38,3 +40,13 @@ bScan :: (o -> i -> o) -> o -> Behaviour i o
 bScan f acc = Behaviour $ \i ->
   let next = f acc i
    in (next, bScan f next)
+
+bScanSplit :: (a -> i -> (o, a)) -> a -> Behaviour i o
+bScanSplit f acc = Behaviour $ \i ->
+  let (o, acc') = f acc i
+   in (o, bScanSplit f acc')
+   
+bEval :: Behaviour i o -> [i] -> [o]
+bEval _ [] = []
+bEval b (x:xs) = let (o, b') = getBehaviour b x
+                  in o:bEval b' xs

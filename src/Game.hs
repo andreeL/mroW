@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Game (
-    GameState,
+    GameState(..),
     VariableName,
     VariableValue,
 
@@ -13,7 +13,11 @@ module Game (
     actionRight,
 
     --
+    Event(..),
+    Program(..),
+    Game(..),
     createGameState,
+    createGame,
     run,
 
     -- debug stuff (where do I put this?)
@@ -29,6 +33,7 @@ module Game (
     useNextCameraMode
     ) where
 
+import Behaviour (Behaviour(..), bScanSplit)
 import Camera (Camera, CameraInput(..), createStaticCamera, createCinematicCamera, createFreeCamera, getBehaviour)
 import Common
 import Data.Map as M
@@ -62,6 +67,8 @@ type Variables = M.Map VariableName VariableValue
 
 data GameState = GameState {
     _variables :: Variables,
+    _lastCameraPlacement :: Placement,
+    _lastPlayerPosition :: Position,
     _camera :: Camera,
     _player :: Player,
     _debugState :: GameDebugState
@@ -85,11 +92,34 @@ createGameState :: GameState
 createGameState = let
     _debugState = createGameDebugState
     _variables = M.empty
+    _lastCameraPlacement = (L.V3 0 0 0, fromQuaternion $ L.Quaternion 1 L.zero)
+    _lastPlayerPosition = L.zero
     _camera = createCamera (_debugState ^. cameraMode)
     _player = createPlayer L.zero
     in GameState{..}
 
-run :: Double -> DeltaTime -> GameState -> (Placement, Position, GameState)
+data Event = UpdateGameStateEvent (GameState -> GameState)
+           | TickEvent Double DeltaTime
+           | RenderEvent
+
+data Program = NoOp
+             | Render (Bool, Placement, Position, GameState)
+
+type Game = Behaviour Event Program
+
+createGame :: GameState -> Game
+createGame = bScanSplit (flip handleEvent)
+
+handleEvent :: Event -> GameState -> (Program, GameState)
+handleEvent (UpdateGameStateEvent f)   gameState = (NoOp, f gameState)
+handleEvent (TickEvent time deltaTime) gameState = (NoOp, run time deltaTime gameState)
+handleEvent (RenderEvent)              gameState =
+    let (shadersAreDirty, gameState') = extractDirtyShadersFlag gameState
+        cameraPlacement = gameState' ^. lastCameraPlacement
+        playerPosition = gameState' ^. lastPlayerPosition
+    in (Render (shadersAreDirty, cameraPlacement, playerPosition, gameState'), gameState')
+        
+run :: Double -> DeltaTime -> GameState -> GameState
 run time deltaTime gameState = let
     _debugState = gameState ^. debugState
     playerInput = PlayerInput {
@@ -100,17 +130,18 @@ run time deltaTime gameState = let
         _moveDown = isJust . getVariable actionDown $ gameState,
         _moveRight = isJust . getVariable actionRight $ gameState
     }
-    (playerPosition, _player) = getBehaviour (gameState ^. player) playerInput
+    (_lastPlayerPosition, _player) = getBehaviour (gameState ^. player) playerInput
 
     cameraInput = CameraInput {
         _time = time,
         _deltaTime = deltaTime,
         _mouseXY = _debugState ^. mousePos,
-        _target = playerPosition
+        _target = _lastPlayerPosition
     }
     _variables = gameState ^. variables
-    (cameraPlacement, _camera) = getBehaviour (gameState ^. camera) cameraInput
-    in (cameraPlacement, playerPosition, GameState{..})
+    (_lastCameraPlacement, _camera) = getBehaviour (gameState ^. camera) cameraInput
+
+    in GameState{..}
 
 setDirtyShadersFlag :: GameState -> ((), GameState)
 setDirtyShadersFlag gameState = ((), (debugState.dirtyShadersFlag.~ True $ gameState))
