@@ -10,7 +10,7 @@ module Player
 import Behaviour (Behaviour, bScan)
 import Common
 import Control.Arrow (Arrow(..), (>>>), returnA)
-import Linear (V3(..), (^+^), (^*), normalize, zero)
+import Linear (V3(..), (^+^), (^-^), (^*), dot, norm, signorm, normalize, zero)
 
 data PlayerInput = PlayerInput {
   _time :: Time,
@@ -21,7 +21,21 @@ data PlayerInput = PlayerInput {
   _moveRight :: Bool
 }
 
+data Spring = Spring {
+  _springPosition :: Position,
+  _springRestingLength :: Float,
+  _springConstant :: Float,
+  _springDampening :: Float
+}
+
 type Player = Behaviour PlayerInput Position
+
+wallSpring =
+  let _springPosition = zero
+      _springRestingLength = 1.5
+      _springConstant = 100
+      _springDampening = 2
+   in Spring{..}
 
 createPlayer position = proc playerInput@PlayerInput{..} -> do
   let acceleration = thrusterAcceleration playerInput
@@ -36,8 +50,28 @@ thrusterAcceleration PlayerInput{..} =
   in (normalize $ V3 x y 0) ^* strength
 
 advancePlayerState :: (Velocity, Position) -> Behaviour (DeltaTime, Acceleration) (Velocity, Position)
-advancePlayerState = bScan $ \state (deltaSeconds, thrusterAcceleration) ->
-  integrate deltaSeconds (const thrusterAcceleration) state
+advancePlayerState = bScan $ \state (deltaSeconds, staticAcceleration) ->
+  let acceleration = staticAcceleration + (wallSpringAcceleration state)
+   in integrate deltaSeconds (const acceleration) state
+
+wallSpringAcceleration :: (Velocity, Position) -> Acceleration
+wallSpringAcceleration (velocity, position)
+  | position `dot` acceleration > 0 = zero -- we never push the player outwards
+  | otherwise                       = acceleration
+  where force = springForce wallSpring (velocity, position)
+        acceleration = force -- we just treat it as the acceleration
+
+springForce :: Spring -> (Velocity, Position) -> Acceleration
+springForce Spring{..} (velocity, position)
+  | abs springExtension < 0.0001 = zero
+  | otherwise  = springNormal ^* force
+    where diff = position ^-^ _springPosition
+          springExtension = norm diff
+          springNormal = signorm diff
+          -- Hooke's law with dampening
+          x = springExtension - _springRestingLength
+          v = springNormal `dot` velocity
+          force = -(_springConstant * x) - (_springDampening * v)
 
 integrate :: DeltaTime -> ((Velocity, Position) -> Acceleration) -> (Velocity, Position) -> (Velocity, Position)
 integrate deltaSeconds getAcceleration (velocity, position) =
