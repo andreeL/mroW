@@ -14,7 +14,7 @@ import Linear (V3(..), (^+^), (^-^), (^*), dot, norm, signorm, normalize, zero)
 
 data PlayerInput = PlayerInput {
   _time :: Time,
-  _deltaSeconds :: DeltaTime,
+  _deltaTime :: DeltaTime,
   _moveUp :: Bool,
   _moveLeft :: Bool,
   _moveDown :: Bool,
@@ -39,7 +39,7 @@ wallSpring =
 
 createPlayer position = proc playerInput@PlayerInput{..} -> do
   let acceleration = thrusterAcceleration playerInput
-  (_, position') <- advancePlayerState (zero, position) -< (_deltaSeconds, acceleration)
+  (_, position') <- advancePlayerState (zero, position) -< (_deltaTime, acceleration)
   returnA -< position'
   
 thrusterAcceleration :: PlayerInput -> Acceleration
@@ -74,8 +74,9 @@ springForce Spring{..} (velocity, position)
           force = -(_springConstant * x) - (_springDampening * v)
 
 integrate :: DeltaTime -> ((Velocity, Position) -> Acceleration) -> (Velocity, Position) -> (Velocity, Position)
-integrate deltaSeconds getAcceleration (velocity, position) =
-  let integratedHalfAcceleration = (getAcceleration (velocity, position)) ^* (0.5 * deltaSeconds)
+integrate deltaTime getAcceleration (velocity, position) =
+  let deltaSeconds = getSeconds deltaTime
+      integratedHalfAcceleration = (getAcceleration (velocity, position)) ^* (0.5 * deltaSeconds)
       friction = 0.1 ** deltaSeconds
       intermediateVelocity = (velocity ^* friction) ^+^ integratedHalfAcceleration
       velocity' = intermediateVelocity ^+^ integratedHalfAcceleration

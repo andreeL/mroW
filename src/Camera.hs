@@ -22,7 +22,7 @@ type MouseXY = V2 Float
 data CameraInput = CameraInput {
   -- this is mostly just placeholder stuff for testing
   _time :: Time,
-  _deltaSeconds :: DeltaTime,
+  _deltaTime :: DeltaTime,
   _mouseXY :: (Double, Double),
   _target :: Target
 }
@@ -41,7 +41,7 @@ createStaticCamera placement = pure placement
 
 createCinematicCamera :: Position -> Camera
 createCinematicCamera position =
-  let updatePosition CameraInput{..} = followBehind _deltaSeconds _target
+  let updatePosition CameraInput{..} = followBehind _deltaTime _target
    in proc cameraInput@CameraInput{..} -> do
     nextPosition <- bScan (flip updatePosition) position -< cameraInput
     returnA -< (nextPosition, lookAt _target nextPosition)
@@ -56,11 +56,11 @@ createFreeCamera = arr $ \CameraInput{..} ->
 follow :: DeltaTime -> Position -> Position -> Position
 follow deltaTime target origin =
   let toTarget = target - origin
-   in (origin ^+^ (toTarget ^* (1 - 0.25 ** deltaTime)))
+   in origin ^+^ (toTarget ^* (1 - 0.25 ** (getSeconds deltaTime)))
 
 followBehind :: DeltaTime -> Position -> Position -> Position
 followBehind deltaTime target position =
-  follow deltaTime target $ position ^+^ (V3 0 0 (deltaTime * (-2)))
+  follow deltaTime target $ position ^+^ (V3 0 0 ((getSeconds deltaTime) * (-2)))
 
 lookAt :: Position -> Position -> Rotation
 lookAt target origin =

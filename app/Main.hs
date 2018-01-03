@@ -1,6 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main where
 
+import           Common (DeltaTime(..))
 import           Control.Concurrent.STM
 import qualified Control.Exception
 import           Control.Monad
@@ -165,7 +166,7 @@ runLoop previousTime eventQueue gameState progGLState@GLState{..} window = do
         True -> return ()
         False -> do
             time <- fmap (fromMaybe 0) GLFW.getTime
-            let deltaTime = realToFrac . max 0 . min 1 $ (time - previousTime)
+            let deltaTime = DeltaTime {getSeconds = realToFrac . max 0 . min 1 $ (time - previousTime)}
 
             -- handle events
             ((eyePosition, eyeRotation), playerPosition, gameState') <- fmap (run time deltaTime) $ runQueuedEvents eventQueue gameState

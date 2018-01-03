@@ -85,12 +85,12 @@ createGameState = let
     _player = createPlayer L.zero
     in GameState{..}
 
-run :: Double -> Float -> GameState -> (Placement, Position, GameState)
-run time deltaSeconds gameState = let
+run :: Double -> DeltaTime -> GameState -> (Placement, Position, GameState)
+run time deltaTime gameState = let
     _debugState = gameState ^. debugState
     playerInput = PlayerInput {
         _time = time,
-        _deltaSeconds = deltaSeconds,
+        _deltaTime = deltaTime,
         _moveUp = isJust . getVariable actionUp $ gameState,
         _moveLeft = isJust . getVariable actionLeft $ gameState,
         _moveDown = isJust . getVariable actionDown $ gameState,
@@ -100,7 +100,7 @@ run time deltaSeconds gameState = let
 
     cameraInput = CameraInput {
         _time = time,
-        _deltaSeconds = deltaSeconds,
+        _deltaTime = deltaTime,
         _mouseXY = _debugState ^. mousePos,
         _target = playerPosition
     }
