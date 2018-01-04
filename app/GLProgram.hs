@@ -16,7 +16,7 @@ import Graphics.GL
 import Graphics.UI.GLFW (Window, getFramebufferSize, swapBuffers)
 import Linear (V3(..), V4(..))
 import OpenGLHelpers
-import Program (Program(..), RenderInfo(..))
+import Program (Program(..), SceneInfo(..))
 
 sceneProgramSource = ("shaders/Scene.vert", "shaders/Scene.frag") :: (FilePath, FilePath)
 postProcessingProgramSource = ("shaders/HUD.vert", "shaders/HUD.frag") :: (FilePath, FilePath)
@@ -49,10 +49,10 @@ createGLState (width, height) = do
 
 runProgram :: (Double, Window, GLState) -> Program -> IO ()
 runProgram _ NoOp = pure ()
-runProgram (time, window, progGLState@GLState{..}) (Render renderInfo) = do
-  when (_shadersAreDirty renderInfo) $ do
+runProgram (time, window, progGLState@GLState{..}) (RenderScene sceneInfo) = do
+  when (_shadersAreDirty sceneInfo) $ do
     recreateGLSLPrograms progGLState
-  let (mouseX, mouseY) = _mousePos renderInfo
+  let (mouseX, mouseY) = _mousePos sceneInfo
 
   -- pre render
   (width, height) <- getFramebufferSize window
@@ -72,7 +72,7 @@ runProgram (time, window, progGLState@GLState{..}) (Render renderInfo) = do
         setFloat programId "fTime" Nothing (realToFrac time)
         setFloat2 programId "fFov" Nothing (fst fov) (snd fov)
         setFloat2 programId "fMouse" Nothing (realToFrac mouseX) (realToFrac mouseY)
-        let (V3 eyeX eyeY eyeZ, eyeRotation) = _camera renderInfo
+        let (V3 eyeX eyeY eyeZ, eyeRotation) = _camera sceneInfo
         setFloat3 programId "eyePosition" Nothing (realToFrac eyeX) (realToFrac eyeY) (realToFrac eyeZ)
         setMatrix33 programId "eyeRotation" Nothing (fmap realToFrac . join . fmap toList . toList $ eyeRotation)
         setupAction programId
@@ -80,7 +80,7 @@ runProgram (time, window, progGLState@GLState{..}) (Render renderInfo) = do
 
   -- render scene
   withFullscreenGLSLProgram sceneTargetBuffer sceneTargetSize sceneProgram $ \programId -> do
-    let (V3 pX pY pZ) = _player renderInfo
+    let (V3 pX pY pZ) = _player sceneInfo
     setFloat3 programId "playerPosition" Nothing (realToFrac pX) (realToFrac pY) (realToFrac pZ)
     let closestObjects = buildClosestObjectList 100 (testObjects time)
     setFloat4Array programId "objects" Nothing (fmap realToFrac . concatMap toList $ closestObjects)
@@ -94,7 +94,7 @@ runProgram (time, window, progGLState@GLState{..}) (Render renderInfo) = do
     glBindTexture GL_TEXTURE_2D (snd _font)
     setInt programId "fontTexture" Nothing 1
     setFloat2 programId "fMouse" Nothing 0 0
-    setInt programId "gPoints" Nothing (fromIntegral . _points $ renderInfo)
+    setInt programId "gPoints" Nothing (fromIntegral . _points $ sceneInfo)
 
   -- post render
   swapBuffers window

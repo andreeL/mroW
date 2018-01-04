@@ -2,7 +2,7 @@
 
 module Game (
   Event(..),
-  Game(..),
+  Game,
   createGame,
 ) where
 
@@ -13,53 +13,54 @@ import Data.Maybe (isJust)
 import GameState
 import Lens.Micro.Platform
 import Player (Player, PlayerInput(..))
-import Program (Program(..), RenderInfo(..))
+import Program (Program(..), SceneInfo(..))
 
-type EventHandler = GameState -> (Program, GameState)
-data Event = UpdateGameStateEvent (GameState -> GameState)
+data Event = UpdateEvent (GameState -> GameState)
            | TickEvent Double DeltaTime
            | RenderEvent
 
 type Game = Behaviour Event Program
-createGame :: GameState -> Game
-createGame gameState = bScanSplit (flip handleEvent) gameState
+type ProgramBuilder = GameState -> (Program, GameState)
 
-handleEvent :: Event -> EventHandler
-handleEvent (UpdateGameStateEvent f)   = handleUpdateGameStateEvent f
+createGame :: GameState -> Game
+createGame state = bScanSplit (flip handleEvent) state
+
+handleEvent :: Event -> ProgramBuilder
+handleEvent (UpdateEvent f)            = handleUpdateEvent f
 handleEvent (TickEvent time deltaTime) = handleTickEvent time deltaTime
 handleEvent (RenderEvent)              = handleRenderEvent
 
-handleUpdateGameStateEvent :: (GameState -> GameState) -> EventHandler
-handleUpdateGameStateEvent f gameState = (NoOp, f gameState)
+handleUpdateEvent :: (GameState -> GameState) -> ProgramBuilder
+handleUpdateEvent f state = (NoOp, f state)
 
-handleTickEvent :: Double -> DeltaTime -> EventHandler
-handleTickEvent time deltaTime gameState = let
+handleTickEvent :: Double -> DeltaTime -> ProgramBuilder
+handleTickEvent time deltaTime state = let
   playerInput = PlayerInput {
     _time = time,
     _deltaTime = deltaTime,
-    _moveUp = isJust . getVariable varActionUp $ gameState,
-    _moveLeft = isJust . getVariable varActionLeft $ gameState,
-    _moveDown = isJust . getVariable varActionDown $ gameState,
-    _moveRight = isJust . getVariable varActionRight $ gameState
+    _moveUp = isJust . getVariable varActionUp $ state,
+    _moveLeft = isJust . getVariable varActionLeft $ state,
+    _moveDown = isJust . getVariable varActionDown $ state,
+    _moveRight = isJust . getVariable varActionRight $ state
   }
-  (_lastPlayerPosition, _player) = getBehaviour (gameState ^. player) playerInput
+  (_lastPlayerPosition, _player) = getBehaviour (state ^. player) playerInput
 
   cameraInput = CameraInput {
     _time = time,
     _deltaTime = deltaTime,
-    _mouseXY = getMousePos gameState,
+    _mouseXY = getMousePos state,
     _target = _lastPlayerPosition
   }
-  _variables = gameState ^. variables
-  (_lastCameraPlacement, _camera) = getBehaviour (gameState ^. camera) cameraInput
+  _variables = state ^. variables
+  (_lastCameraPlacement, _camera) = getBehaviour (state ^. camera) cameraInput
 
   in (NoOp, GameState{..})
 
-handleRenderEvent :: EventHandler
-handleRenderEvent gameState =
-  let (_shadersAreDirty, gameState') = extractDirtyShadersFlag gameState
-      _camera = gameState' ^. lastCameraPlacement
-      _player = gameState' ^. lastPlayerPosition
-      _mousePos = getMousePos gameState'
-      _points = getPoints gameState'
-  in (Render RenderInfo{..}, gameState')
+handleRenderEvent :: ProgramBuilder
+handleRenderEvent state =
+  let (_shadersAreDirty, state') = extractDirtyShadersFlag state
+      _camera = state' ^. lastCameraPlacement
+      _player = state' ^. lastPlayerPosition
+      _mousePos = getMousePos state'
+      _points = getPoints state'
+  in (RenderScene SceneInfo{..}, state')

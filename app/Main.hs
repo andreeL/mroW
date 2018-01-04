@@ -1,14 +1,14 @@
 {-# LANGUAGE RecordWildCards #-}
 module Main where
 
-import           Behaviour (Behaviour(..))
-import           Common (DeltaTime(..))
-import           Control.Concurrent.STM
-import           Control.Monad
-import           Data.Maybe
-import           Game
-import           GameState
-import           GLProgram (GLState(..), createGLState, runProgram)
+import Behaviour (Behaviour(..))
+import Common (DeltaTime(..))
+import Control.Concurrent.STM
+import Control.Monad
+import Data.Maybe
+import Game
+import GameState
+import GLProgram (GLState(..), createGLState, runProgram)
 import qualified Graphics.UI.GLFW as GLFW
 
 defaultWindowSize = (960, 540) :: (Int, Int)
@@ -86,7 +86,7 @@ runLoop previousTime eventQueue game progGLState@GLState{..} window = do
             maybeEvent <- atomically $ tryReadTQueue eventQueue
             case maybeEvent of
               Just event -> do
-                game' <- handleGameEvent (UpdateGameStateEvent event) game
+                game' <- handleGameEvent (UpdateEvent event) game
                 handleQueuedEvents eventQueue game'
               Nothing -> return game
 

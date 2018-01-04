@@ -1,8 +1,8 @@
 module Program where
 
-import Common (Placement, Position)
-
-data RenderInfo = RenderInfo {
+import Common (Placement, Position, DeltaTime)
+  
+data SceneInfo = SceneInfo {
   _shadersAreDirty :: Bool,
   _camera :: Placement,
   _player :: Position,
@@ -11,4 +11,4 @@ data RenderInfo = RenderInfo {
 }
 
 data Program = NoOp
-             | Render RenderInfo
+             | RenderScene SceneInfo
