@@ -2,19 +2,17 @@
 {-# LANGUAGE Arrows #-}
 
 module Camera
-  ( Placement
-  , CameraInput(..)
+  ( CameraInput(..)
   , Camera
-  , getBehaviour
-  , createStaticCamera
-  , createCinematicCamera
-  , createFreeCamera
+  , CameraMode(..)
+  , nextCameraMode
+  , createCamera
   ) where
 
 import Behaviour (Behaviour(..), bScan)
 import Control.Arrow (Arrow(..), returnA)
 import Common
-import Linear (V2(..), V3(..), M33(..), normalize, cross, axisAngle, fromQuaternion, (^+^), (^*))
+import Linear (V2(..), V3(..), M33(..), Quaternion(..), normalize, cross, axisAngle, fromQuaternion, (^+^), (^*), zero)
 
 type Target = V3 Float
 type MouseXY = V2 Float
@@ -30,11 +28,16 @@ data CameraInput = CameraInput {
 -- a (possibly) stateful camera
 type Camera = Behaviour CameraInput Placement
 
-getEyePosition :: Double -> V3 Float
-getEyePosition time =
-  let x = (realToFrac $ (sin $ time * 0.3) * 1.5)
-      y = (realToFrac $ (cos $ time * 0.3) * 1.4)
-   in V3 x y (-1)
+data CameraMode = StaticCamera | CinematicCamera | FreeCamera deriving (Bounded, Enum, Eq, Show, Read)
+nextCameraMode :: CameraMode -> CameraMode
+nextCameraMode cameraMode | cameraMode == maxBound = minBound
+                          | otherwise              = succ cameraMode
+
+createCamera :: CameraMode -> Camera
+createCamera cameraMode = case cameraMode of
+    StaticCamera -> createStaticCamera (V3 0 0 (-1.5), fromQuaternion $ Quaternion 1 zero)
+    CinematicCamera -> createCinematicCamera (V3 0 0 (-1.5))
+    FreeCamera -> createFreeCamera
 
 createStaticCamera :: Placement -> Camera
 createStaticCamera placement = pure placement
@@ -68,3 +71,10 @@ lookAt target origin =
       vX = normalize $ cross (V3 0 1 0) vZ
       vY = cross vZ vX
    in V3 vX vY vZ
+
+getEyePosition :: Double -> V3 Float
+getEyePosition time =
+  let x = (realToFrac $ (sin $ time * 0.3) * 1.5)
+      y = (realToFrac $ (cos $ time * 0.3) * 1.4)
+  in V3 x y (-1)
+   
