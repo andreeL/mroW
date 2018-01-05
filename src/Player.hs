@@ -77,8 +77,8 @@ integrate :: DeltaTime -> ((Velocity, Position) -> Acceleration) -> (Velocity, P
 integrate deltaTime getAcceleration (velocity, position) =
   let deltaSeconds = getSeconds deltaTime
       integratedHalfAcceleration = (getAcceleration (velocity, position)) ^* (0.5 * deltaSeconds)
-      friction = 0.1 ** deltaSeconds
+      friction = 0.1 ** (deltaSeconds * 0.5)
       intermediateVelocity = (velocity ^* friction) ^+^ integratedHalfAcceleration
-      velocity' = intermediateVelocity ^+^ integratedHalfAcceleration
+      velocity' = (intermediateVelocity ^* friction) ^+^ integratedHalfAcceleration
       position' = position ^+^ (intermediateVelocity ^* deltaSeconds)
     in (velocity', position')
