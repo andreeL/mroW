@@ -87,8 +87,8 @@ vec4 getNumberText(vec4 numberCharInfo)
     vec4 textColor = vec4(0);
     for (int i = 0; i < 10; ++i)
     {
-        number = number / 10;
-        float numberChar = floor(fract(number) * 10);
+        number = floor(number) / 10;
+        float numberChar = round(fract(number) * 10);
         textColor = blendOnto(textColor, getNumberChar(vec4(position, size, numberChar)));
         if (number < 1)
             break;
