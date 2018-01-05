@@ -5,11 +5,11 @@ import Behaviour (Behaviour(..))
 import Common (DeltaTime(..))
 import Control.Concurrent.STM
 import Control.Monad
-import Data.Maybe
-import Game
-import GameState
+import Data.Maybe (fromMaybe)
+import Menu (createMenu, createMenuState)
 import GLProgram (GLState(..), createGLState, runProgram)
 import qualified Graphics.UI.GLFW as GLFW
+import Program (EventHandler, Event(..))
 
 defaultWindowSize = (960, 540) :: (Int, Int)
 --defaultWindowSize = (1728, 972) :: (Int, Int)
@@ -28,14 +28,7 @@ withGLFW program = do
     program
     GLFW.terminate
 
-type GameEvent = GameState -> GameState
-type EventQueue = Control.Concurrent.STM.TQueue GameEvent
-
-setOrRemove :: VariableName -> VariableValue -> Bool -> GameState -> ((), GameState)
-setOrRemove variableName variableValue doSet =
-  if (doSet == True)
-    then setVariable variableName variableValue
-    else removeVariable variableName
+type EventQueue = Control.Concurrent.STM.TQueue Event
 
 main :: IO ()
 main = do
@@ -52,23 +45,17 @@ main = do
           let pressed = action /= GLFW.KeyState'Released
           when pressed $ do
             when (key == GLFW.Key'Escape) $ GLFW.setWindowShouldClose window True
-            when (key == GLFW.Key'F1) $ atomically $ writeTQueue eventQueue $ snd . setDirtyShadersFlag
-            when (key == GLFW.Key'F2) $ atomically $ writeTQueue eventQueue $ snd . useNextCameraMode
-            when (key == GLFW.Key'Space) $ atomically $ writeTQueue eventQueue $ snd . addPoints 1
-          when (key == GLFW.Key'W) $ atomically $ writeTQueue eventQueue $ snd . setOrRemove varActionUp "" pressed
-          when (key == GLFW.Key'A) $ atomically $ writeTQueue eventQueue $ snd . setOrRemove varActionLeft "" pressed
-          when (key == GLFW.Key'S) $ atomically $ writeTQueue eventQueue $ snd . setOrRemove varActionDown "" pressed
-          when (key == GLFW.Key'D) $ atomically $ writeTQueue eventQueue $ snd . setOrRemove varActionRight "" pressed
+          atomically $ writeTQueue eventQueue $ KeyEvent key scancode action mods
           )
         GLFW.setCursorPosCallback window (Just $ \win x y -> do
-          atomically $ writeTQueue eventQueue $ snd . setMousePos (x, y)
+          atomically $ writeTQueue eventQueue $ MouseEvent x y
           )
         time <- fmap (fromMaybe 0) GLFW.getTime
-        runLoop time eventQueue (createGame createGameState) progGLState window
+        runLoop time eventQueue (createMenu createMenuState) progGLState window
         GLFW.destroyWindow window
 
-runLoop :: Double -> EventQueue -> Game -> GLState -> GLFW.Window -> IO ()
-runLoop previousTime eventQueue game progGLState@GLState{..} window = do
+runLoop :: Double -> EventQueue -> EventHandler -> GLState -> GLFW.Window -> IO ()
+runLoop previousTime eventQueue eventHandler progGLState@GLState{..} window = do
   GLFW.pollEvents
   windowShouldClose <- GLFW.windowShouldClose window
   case windowShouldClose of
@@ -76,22 +63,23 @@ runLoop previousTime eventQueue game progGLState@GLState{..} window = do
     False -> do
       time <- fmap (fromMaybe 0) GLFW.getTime
       let deltaTime = DeltaTime {getSeconds = realToFrac . max 0 . min 1 $ (time - previousTime)}
-      let handleGameEvent :: Event -> Game -> IO Game
-          handleGameEvent event game =
-            let (program, game') = getBehaviour game $ event
-            in runProgram (time, window, progGLState) program *> pure game'
+      let handleEvent :: Event -> EventHandler -> IO EventHandler
+          handleEvent event eventHandler =
+            let (program, eventHandler') = getBehaviour eventHandler $ event
+            in runProgram (time, window, progGLState) program *> pure eventHandler'
          
-      let handleQueuedEvents :: EventQueue -> Game -> IO Game
-          handleQueuedEvents eventQueue game = do
+      let handleQueuedEvents :: EventHandler -> IO EventHandler
+          handleQueuedEvents eventHandler = do
             maybeEvent <- atomically $ tryReadTQueue eventQueue
             case maybeEvent of
               Just event -> do
-                game' <- handleGameEvent (UpdateEvent event) game
-                handleQueuedEvents eventQueue game'
-              Nothing -> return game
+                eventHandler' <- handleEvent event eventHandler
+                handleQueuedEvents eventHandler'
+              Nothing -> return eventHandler
 
       -- handle events
-      game' <- handleQueuedEvents eventQueue game >>=
-        handleGameEvent (TickEvent time deltaTime) >>=
-        handleGameEvent RenderEvent
-      runLoop time eventQueue game' progGLState window
+      eventHandler' <- pure eventHandler >>=
+        handleQueuedEvents >>=
+        handleEvent (TickEvent time deltaTime) >>=
+        handleEvent RenderEvent
+      runLoop time eventQueue eventHandler' progGLState window

@@ -48,8 +48,11 @@ createGLState (width, height) = do
   pure GLState{..}
 
 runProgram :: (Double, Window, GLState) -> Program -> IO ()
-runProgram _ NoOp = pure ()
-runProgram (time, window, progGLState@GLState{..}) (RenderScene sceneInfo) = do
+runProgram (_, _, glState) (NoOp)                  = pure ()
+runProgram state           (RenderScene sceneInfo) = renderScene state sceneInfo
+
+renderScene :: (Double, Window, GLState) -> SceneInfo -> IO ()
+renderScene (time, window, progGLState@GLState{..}) sceneInfo = do
   when (_shadersAreDirty sceneInfo) $ do
     recreateGLSLPrograms progGLState
   let (mouseX, mouseY) = _mousePos sceneInfo
@@ -98,8 +101,6 @@ runProgram (time, window, progGLState@GLState{..}) (RenderScene sceneInfo) = do
 
   -- post render
   swapBuffers window
-
-  --pure progGLState
 
 recreateGLSLPrograms :: GLState -> IO ()
 recreateGLSLPrograms GLState{..} = catch (do

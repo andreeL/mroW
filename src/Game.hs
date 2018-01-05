@@ -1,9 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Game (
-  Event(..),
-  Game,
-  createGame,
+  createGame
 ) where
 
 import Behaviour (Behaviour(..), bScanSplit)
@@ -13,28 +11,56 @@ import Data.Maybe (isJust)
 import GameState
 import Lens.Micro.Platform
 import Player (Player, PlayerInput(..))
-import Program (Program(..), SceneInfo(..))
+import Program (EventHandler, Event(..), SceneInfo(..), Program(..))
+import qualified Graphics.UI.GLFW as GLFW
 
-data Event = UpdateEvent (GameState -> GameState)
-           | TickEvent Double DeltaTime
-           | RenderEvent
-
-type Game = Behaviour Event Program
 type ProgramBuilder = GameState -> (Program, GameState)
 
-createGame :: GameState -> Game
+createGame :: GameState -> EventHandler
 createGame state = bScanSplit (flip handleEvent) state
 
 handleEvent :: Event -> ProgramBuilder
-handleEvent (UpdateEvent f)            = handleUpdateEvent f
-handleEvent (TickEvent time deltaTime) = handleTickEvent time deltaTime
-handleEvent (RenderEvent)              = handleRenderEvent
+handleEvent (KeyEvent key scancode action mods) = handleKeyEvent key scancode action mods
+handleEvent (MouseEvent x y)                    = handleMouseEvent (x, y)
+handleEvent (TickEvent time deltaTime)          = handleTickEvent time deltaTime
+handleEvent (RenderEvent)                       = handleRenderEvent
+
+setOrRemove :: VariableName -> VariableValue -> Bool -> GameState -> GameState
+setOrRemove variableName variableValue doSet =
+  snd . if (doSet == True)
+    then setVariable variableName variableValue
+    else removeVariable variableName
+
+handleKeyEvent :: GLFW.Key -> Int -> GLFW.KeyState -> GLFW.ModifierKeys -> ProgramBuilder
+handleKeyEvent key scancode action mods state =
+  let keyDown = action /= GLFW.KeyState'Released
+      state' = case key of
+        GLFW.Key'W -> setOrRemove varActionUp "" keyDown state
+        GLFW.Key'A -> setOrRemove varActionLeft "" keyDown state
+        GLFW.Key'S -> setOrRemove varActionDown "" keyDown state
+        GLFW.Key'D -> setOrRemove varActionRight "" keyDown state
+        _ -> state
+
+      state'' = if action == GLFW.KeyState'Pressed then
+        case key of
+          GLFW.Key'F1 -> snd . setDirtyShadersFlag $ state'
+          GLFW.Key'F2 -> snd . useNextCameraMode $ state'
+          GLFW.Key'Space -> snd . addPoints 1 $ state'
+          _ -> state'
+        else state'
+  
+  in (NoOp, state'')
+
+handleMouseEvent :: (Double, Double) -> ProgramBuilder
+handleMouseEvent mousePos state = (NoOp, snd . setMousePos mousePos $ state)
 
 handleUpdateEvent :: (GameState -> GameState) -> ProgramBuilder
 handleUpdateEvent f state = (NoOp, f state)
 
 handleTickEvent :: Double -> DeltaTime -> ProgramBuilder
 handleTickEvent time deltaTime state = let
+  isSet var = isJust . getVariable var $ state
+  
   playerInput = PlayerInput {
     _time = time,
     _deltaTime = deltaTime,
