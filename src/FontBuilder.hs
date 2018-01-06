@@ -11,13 +11,14 @@ import Control.Exception (tryJust)
 import Control.Monad (forM_, foldM, guard)
 import Control.Monad.Primitive (PrimMonad, PrimState)
 import Control.Monad.ST (runST)
-import Data.Maybe (listToMaybe)
 import Data.Vector.Unboxed as VConst (Vector, (!), fromList, zipWith, unsafeFreeze, unsafeThaw, generate)
 import Data.Vector.Unboxed.Mutable as VMutable (MVector, read, write, unsafeNew)
 import Data.Char (intToDigit)
 import Data.Word (Word8)
 import qualified Data.Map as Map (Map, fromList)
+import Data.Either (either)
 import qualified FreeTypeHelpers as FTH (FTGlyph(..), createGlyphs)
+import Text.Read (readMaybe)
 import System.IO.Error (isDoesNotExistError)
 
 type Vec2 = (Int, Int)
@@ -49,7 +50,7 @@ getLength = sqrt . fromIntegral . getSquareLength
 createHUDFont :: IO FontAndTexture
 createHUDFont = do
   let fontCacheFilepath = "hudFont.tmp"
-  cachedFont <- getFontFromFile fontCacheFilepath
+  cachedFont <- readFromFile fontCacheFilepath
   case cachedFont of
     Just font -> putStrLn "Using cached font!" *> pure font
     Nothing -> do
@@ -57,18 +58,14 @@ createHUDFont = do
       putStrLn "Generating font, this might take a while... (do NOT do this in GHCi, it can crash)"
       -- TODO: WARNING, GHCi crashes when trying to build fonts this highres... this is probably a good place to start optimizing :P
       font <- createFont Nothing 32 16 0 ('\0':ascii)
-      writeFontToFile fontCacheFilepath font
+      writeToFile fontCacheFilepath font
       pure font
 
-getFontFromFile :: String -> IO (Maybe FontAndTexture)
-getFontFromFile filepath = do
-  fontCacheContent <- tryJust (guard . isDoesNotExistError) (readFile filepath)
-  pure $ case fontCacheContent of
-    Left _ -> Nothing
-    Right content -> fmap fst . listToMaybe . reads $ content
+readFromFile :: Read a => String -> IO (Maybe a)
+readFromFile filepath = either (const Nothing) readMaybe <$> tryJust (guard . isDoesNotExistError) (readFile filepath)
 
-writeFontToFile :: String -> FontAndTexture -> IO ()
-writeFontToFile filepath fontAndTexture = writeFile filepath $ show fontAndTexture
+writeToFile :: Show a => String -> a -> IO ()
+writeToFile filepath = writeFile filepath . show
 
 createFont :: Maybe String -> Int -> Int -> Int -> [Char] -> IO FontAndTexture
 createFont maybeFontPath glyphHeight scaleDown borderSize chars = do
