@@ -1,22 +1,24 @@
 {-# LANGUAGE RecordWildCards #-}
 module FontBuilder
   ( Font
+  , Glyph(..)
   , createHUDFont
   , createFont
   , showFont -- only for debuging
   ) where
 
-import Control.Arrow ((***))
 import Control.Exception (tryJust)
 import Control.Monad (forM_, foldM, guard)
 import Control.Monad.Primitive (PrimMonad, PrimState)
 import Control.Monad.ST (runST)
-import Data.Vector.Unboxed as VConst (Vector, (!), fromList, zipWith, unsafeFreeze, unsafeThaw, generate)
-import Data.Vector.Unboxed.Mutable as VMutable (MVector, read, write, unsafeNew)
 import Data.Char (intToDigit)
-import Data.Word (Word8)
-import qualified Data.Map as Map (Map, fromList)
 import Data.Either (either)
+import Data.Foldable (foldl')
+import Data.Bifunctor (bimap)
+import qualified Data.Map as Map (Map, fromList)
+import Data.Vector.Unboxed as VConst (Vector, (!), fromList, zipWith, unsafeFreeze, unsafeThaw, generate)
+import Data.Vector.Unboxed.Mutable as VMutable (MVector, read, write, replicate)
+import Data.Word (Word8)
 import qualified FreeTypeHelpers as FTH (FTGlyph(..), createGlyphs)
 import Text.Read (readMaybe)
 import System.IO.Error (isDoesNotExistError)
@@ -24,18 +26,17 @@ import System.IO.Error (isDoesNotExistError)
 type Vec2 = (Int, Int)
 
 data Glyph = Glyph {
+  -- seems like we loose some precision on bearing and advance, maybe we should use floats instead
   _bearing :: Vec2,
   _advance :: Int,
   _imagePos :: Vec2
 } deriving (Show, Read)
 
-data Font = Font {
-  _size :: Vec2,
-  _glyphs :: Map.Map Char Glyph
-} deriving (Show, Read)
+type Font = Map.Map Char Glyph
 
-type FontAndTexture = (Font, (Vec2, VConst.Vector Word8))
-maxDelta = 10000 :: Int
+type Image a = (Vec2, a)
+type FontAndTexture = (Font, Image (VConst.Vector Word8))
+maxDelta = 30000 :: Int
 
 getSquareLength :: Vec2 -> Int
 getSquareLength (dX, dY) = dX * dX + dY * dY
@@ -54,10 +55,10 @@ createHUDFont = do
   case cachedFont of
     Just font -> putStrLn "Using cached font!" *> pure font
     Nothing -> do
-      let ascii = ['\32'..'\127'] -- we only care for the basic character set for now
-      putStrLn "Generating font, this might take a while... (do NOT do this in GHCi, it can crash)"
+      let ascii = ['\0'..'\127'] -- we only care for the basic character set for now
+      putStrLn "Generating font, this might take several minutes... (do NOT do this in GHCi, it can crash)"
       -- TODO: WARNING, GHCi crashes when trying to build fonts this highres... this is probably a good place to start optimizing :P
-      font <- createFont Nothing 32 16 0 ('\0':ascii)
+      font <- createFont Nothing 26 3 16 ascii
       writeToFile fontCacheFilepath font
       pure font
 
@@ -68,13 +69,13 @@ writeToFile :: Show a => String -> a -> IO ()
 writeToFile filepath = writeFile filepath . show
 
 createFont :: Maybe String -> Int -> Int -> Int -> [Char] -> IO FontAndTexture
-createFont maybeFontPath glyphHeight scaleDown borderSize chars = do
-  ftGlyphs <- FTH.createGlyphs maybeFontPath (Nothing, (glyphHeight * scaleDown) - borderSize) chars
-  pure $ buildFontFromFtGlyphs glyphHeight scaleDown ftGlyphs
+createFont maybeFontPath glyphHeight borderSize scaleDown chars = do
+  ftGlyphs <- FTH.createGlyphs maybeFontPath (Nothing, (glyphHeight * scaleDown)) chars
+  pure $ buildFontFromFtGlyphs glyphHeight borderSize scaleDown ftGlyphs
 
 showFont :: FontAndTexture -> IO ()
 showFont (font, ((textureWidth, textureHeight), textureData)) = do
-  forM_ [0..textureHeight - 1] $ \y -> do
+  forM_ (reverse [0..textureHeight - 1]) $ \y -> do
     forM_ [0..textureWidth - 1] $ \x -> do
       let index = fromIntegral $ x + y * textureWidth
           intensity = (fromIntegral $ textureData ! index) * 15 / 255
@@ -85,92 +86,108 @@ showFont (font, ((textureWidth, textureHeight), textureData)) = do
 
   putStrLn $ show font
 
-buildFontFromFtGlyphs :: Int -> Int -> [(Char, FTH.FTGlyph)] -> FontAndTexture
-buildFontFromFtGlyphs glyphHeight scaleDown ftGlyphs = do
-  let glyphSize@(glyphWidth, _) = (glyphHeight, glyphHeight) -- currently we only support square glyph sizes
-      integerSquareRoot = ceiling . sqrt . fromIntegral
-      integerLog2 = ceiling . logBase 2 . fromIntegral
-      textureHeight = (2^) . integerLog2 . (*glyphHeight) . integerSquareRoot . length $ ftGlyphs
+buildFontFromFtGlyphs :: Int -> Int -> Int -> [(Char, FTH.FTGlyph)] -> FontAndTexture
+buildFontFromFtGlyphs requestedGlyphHeight borderSize scaleDown ftGlyphs = do
+  let glyphSize@(glyphWidth, glyphHeight) = (requestedGlyphHeight + 2 * borderSize, requestedGlyphHeight + 2 * borderSize) -- currently we only support square glyph sizes
+      iSquareRoot = ceiling . sqrt . fromIntegral
+      iLog2 = ceiling . logBase 2 . fromIntegral
+      textureHeight = (2^) . iLog2 . (*glyphHeight) . iSquareRoot . length $ ftGlyphs
       textureSize@(textureWidth, _) = (textureHeight, textureHeight) -- currently we only support square textures with the size beeing a power of two
-      glyphData = buildGlyphData glyphSize scaleDown textureSize ftGlyphs
-      font = Font glyphSize . Map.fromList . fmap (\(char, glyph, _) -> (char, glyph)) $ glyphData
-      textureData = buildTextureData glyphSize textureSize glyphData
+      glyphData = buildGlyphData glyphSize borderSize scaleDown textureSize ftGlyphs
+      font = Map.fromList . fmap (\(char, glyph, _) -> (char, glyph)) $ glyphData
+      textureData = buildTextureData textureSize glyphData
    in (font, (textureSize, textureData))
 
-buildTextureData :: Vec2 -> Vec2 -> [(Char, Glyph, VConst.Vector Word8)] -> VConst.Vector Word8
-buildTextureData (glyphWidth, glyphHeight) (textureWidth, textureHeight) glyphData = runST $ do
-  textureData <- (VMutable.unsafeNew (textureWidth * textureHeight))
-  forM_ glyphData $ \(_, glyph, glyphSDF) -> do
-    let getGlyphPixel x y = glyphSDF ! (x + y * glyphWidth)
+buildTextureData :: Vec2 -> [(Char, Glyph, Image (VConst.Vector Float))] -> VConst.Vector Word8
+buildTextureData (textureWidth, textureHeight) glyphData = runST $ do
+  textureData <- (VMutable.replicate (textureWidth * textureHeight) 255)
+  forM_ glyphData $ \(_, glyph, ((glyphWidth, glyphHeight), glyphSDF)) -> do
+    let getGlyphPixel x y = normalize $ glyphSDF ! (x + y * glyphWidth)
         (xPos, yPos) = _imagePos glyph
     forM_ [0..glyphHeight - 1] $ \y -> do
       forM_ [0..glyphWidth - 1] $ \x -> do
         VMutable.write textureData (xPos + x + (yPos + y) * textureWidth) (getGlyphPixel x y)
   unsafeFreeze textureData
+  where normalize = fromIntegral . (+128) . max (-128) . min (127) . round
 
-buildGlyphData :: Vec2 -> Int -> Vec2 -> [(Char, FTH.FTGlyph)] -> [(Char, Glyph, VConst.Vector Word8)]
-buildGlyphData glyphSize@(glyphWidth, glyphHeight) scaleDown (textureWidth, textureHeight) ftGlyphs =
-  let gridPositions = [(x, y) | y <- [0, glyphHeight..textureHeight - 1], x <- [0, glyphWidth..textureWidth - 1]]
-      buildGlyphTuple (imagePos, (char, ftGlyph)) =
-        let fullSizeSDF = buildSDF (glyphWidth * scaleDown, glyphHeight * scaleDown) ftGlyph
+buildGlyphData :: Vec2 -> Int -> Int -> Vec2 -> [(Char, FTH.FTGlyph)] -> [(Char, Glyph, Image (VConst.Vector Float))]
+buildGlyphData glyphSize@(glyphWidth, glyphHeight) borderSize scaleDown (textureWidth, textureHeight) ftGlyphs =
+  let gridPositions = [(x, y) | y <- [0, glyphHeight..textureHeight - glyphHeight], x <- [0, glyphWidth..textureWidth - glyphHeight]]
+      buildGlyphTuple (imagePos, (char, ftGlyph@FTH.FTGlyph{..})) =
+        let norm = (`div` scaleDown)
+            (ftWidth, ftHeight) = _size
+            (ftBearingX, ftBearingY) = _bearing
             glyph = Glyph {
-          _bearing = FTH._bearing ftGlyph,
-          _advance = FTH._advance ftGlyph,
-          _imagePos = imagePos
-        } in (char, glyph, scaledDownSDF glyphSize scaleDown fullSizeSDF)
+              _bearing = ((norm ftBearingX) - borderSize, (norm (ftBearingY - ftHeight)) - borderSize),
+              _advance = norm _advance,
+              _imagePos = imagePos
+            }
+        in (char, glyph, buildGlyphSDF borderSize scaleDown ftGlyph)
     -- TODO: this is easily parallelized if to slow
     in fmap buildGlyphTuple $ zip gridPositions ftGlyphs
 
-scaledDownSDF :: Vec2 -> Int -> VConst.Vector Word8 -> VConst.Vector Word8
-scaledDownSDF size@(width, height) scaleDown originalData =
-  VConst.generate (uncurry (*) size) $ \i ->
-    let x = i `mod` width
-        y = i `div` width
-        js = [(x * scaleDown + u + (y * scaleDown + v) * width * scaleDown) | u <- [0..scaleDown-1], v <- [0..scaleDown-1]]
-        total = foldr (\j acc -> fromIntegral (originalData ! j) + acc) 0 js
-     in fromIntegral $ total `div` (scaleDown * scaleDown) -- avg
+buildGlyphSDF :: Int -> Int -> FTH.FTGlyph -> Image (VConst.Vector Float)
+buildGlyphSDF borderSize scaleDown FTH.FTGlyph{..} =
+  let scaledBorderSize = borderSize * scaleDown
+      apply f = bimap f f
+      targetSize = apply (+(2 * scaledBorderSize)) _size
+      offset = (scaledBorderSize, scaledBorderSize)
+      glyphImage = (_size, _image)
+      fullSizeSDF = buildSDF targetSize offset glyphImage
+  in scaledDownSDF fullSizeSDF scaleDown
 
-buildSDF :: Vec2 -> FTH.FTGlyph -> VConst.Vector Word8
-buildSDF glyphSize ftGlyph =
-  let posDF = buildDF glyphSize 0 maxDelta ftGlyph
-      negDF = buildDF glyphSize maxDelta 0 ftGlyph
-    in VConst.zipWith (\a b ->
-      let lengthA = getLength $ a
-          distance = lengthA - (getLength b)
-          scale = 8 -- figure out some sensible value for this
-       in (fromIntegral . (+128) . max (-128) . min (127) . round . (* scale) $ distance)
-    ) posDF negDF
+scaledDownSDF :: Image (VConst.Vector Float) -> Int -> Image (VConst.Vector Float)
+scaledDownSDF ((sourceWidth, sourceHeight), sourceData) scaleDown =
+  let targetSize@(targetWith, _) = (sourceWidth `div` scaleDown, sourceHeight `div` scaleDown)
+      getAverage i =
+        let x = i `mod` targetWith
+            y = i `div` targetWith
+            js = [(x * scaleDown + u + (y * scaleDown + v) * sourceWidth) | u <- [0..scaleDown-1], v <- [0..scaleDown-1]]
+            total = foldr (\j acc -> (sourceData ! j) + acc) 0 js
+            average = total / (fromIntegral $ scaleDown * scaleDown)
+        in average
 
-buildDF :: Vec2 -> Int -> Int -> FTH.FTGlyph -> VConst.Vector Vec2
-buildDF glyphSize zeroVal oneVal ftGlyph = runST $ do
-    df <- VConst.unsafeThaw $ createBinaryMask glyphSize zeroVal oneVal ftGlyph
-    run8SSEDT glyphSize df *> unsafeFreeze df
-    
-createBinaryMask :: Vec2 -> Int -> Int -> FTH.FTGlyph -> VConst.Vector Vec2
-createBinaryMask (glyphWidth, glyphHeight) zeroVal oneVal FTH.FTGlyph{..} =
-  let (sourceWidth, sourceHeight) = _size
-      (offsetX, offsetY) = ((glyphWidth - sourceWidth) `div` 2, (glyphHeight - sourceHeight) `div` 2)
-      getVal x y = getGlyphPixel (x - offsetX) (y - offsetY)
-      getGlyphPixel x y =
-        let val = if (x >= 0 && x < sourceWidth && y >= 0 && y < sourceHeight)
-                    then if _image ! (x + (sourceHeight - 1 - y) * sourceWidth) < 128 then oneVal else zeroVal
-                    else oneVal
-         in (val, val)
+  in (targetSize, VConst.generate (uncurry (*) targetSize) getAverage)
 
-  in VConst.fromList [getVal x y | y <- [0..glyphHeight - 1], x <- [0..glyphWidth - 1]]
+buildSDF :: Vec2 -> Vec2 -> Image (Vector Word8) -> Image (VConst.Vector Float)
+buildSDF size offset source =
+  let posDF = buildDF size offset (0, maxDelta) source
+      negDF = buildDF size offset (maxDelta, 0) source
+    in (size, VConst.zipWith (\a b -> (getLength a) - (getLength b)) posDF negDF)
 
-run8SSEDT :: PrimMonad m => Vec2 -> VMutable.MVector (PrimState m) Vec2 -> m ()
-run8SSEDT (glyphWidth, glyphHeight) df = do
+buildDF :: Vec2 -> Vec2 -> (Int, Int) -> Image (Vector Word8) -> VConst.Vector Vec2
+buildDF size offset values source = runST $ do
+  df <- VConst.unsafeThaw $ createBinaryMask size offset values source
+  run8SSEDT (size, df) *> unsafeFreeze df
+
+createBinaryMask :: Vec2 -> Vec2 -> (Int, Int) -> Image (Vector Word8) -> VConst.Vector Vec2
+createBinaryMask (width, height) (offsetX, offsetY) (zeroValue, oneValue) ((sourceWidth, sourceHeight), sourceData) =
+  let threshold = 128
+      getValueAt x y =
+        let x' = x - offsetX
+            y' = y - offsetY
+            value = if (
+                      x' >= 0 && x' < sourceWidth
+                      && y' >= 0 && y' < sourceHeight
+                      && sourceData ! (x' + (sourceHeight - 1 - y') * sourceWidth) >= threshold
+                    )
+                    then zeroValue
+                    else oneValue
+        in (value, value)
+  in VConst.fromList [getValueAt x y | y <- [0..height - 1], x <- [0..width - 1]]
+
+run8SSEDT :: PrimMonad m => Image (VMutable.MVector (PrimState m) Vec2) -> m ()
+run8SSEDT ((width, height), df) = do
   let safeGetPoint x y =
-        if (x >= 0 && y >= 0 && x < glyphWidth && y < glyphHeight)
-          then VMutable.read df (x + y * glyphWidth)
+        if (x >= 0 && y >= 0 && x < width && y < height)
+          then VMutable.read df (x + y * width)
           else pure (maxDelta, maxDelta)
 
   let pickBest x y offsets = do
-        let index = x + y * glyphWidth
+        let index = x + y * width
         thisPoint <- VMutable.read df index
         (best, _) <- foldM (\currentBest (offsetx, offsety) -> do
-          other <- fmap ((+offsetx) *** (+offsety)) $ safeGetPoint (x + offsetx) (y + offsety)
+          other <- bimap (+offsetx) (+offsety) <$> safeGetPoint (x + offsetx) (y + offsety)
           let otherDistance = getSquareLength other
           pure $ if (otherDistance < snd currentBest)
             then (other, otherDistance)
@@ -182,9 +199,9 @@ run8SSEDT (glyphWidth, glyphHeight) df = do
       mask2 = [(1, 0)] :: [Vec2]
       mask3 = [(-1, 1), (0, 1), (1, 1), (1, 0)] :: [Vec2]
       mask4 = [(-1, 0)] :: [Vec2]
-      xForward = [0..glyphWidth - 1]
+      xForward = [0..width - 1]
       xBackward = reverse xForward
-      yForward = [0..glyphHeight - 1]
+      yForward = [0..height - 1]
       yBackward = reverse yForward
 
   forM_ yForward $ \y -> do
