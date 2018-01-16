@@ -2,7 +2,7 @@
 module FontBuilder
   ( Font
   , Glyph(..)
-  , createHUDFont
+  , createGUIFont
   , createFont
   , showFont -- only for debuging
   ) where
@@ -48,9 +48,9 @@ getLength = sqrt . fromIntegral . getSquareLength
 -- maybe I'll make it more robust in the future, and add some extra boundary checks or something
 -- However since no unsafe read/writes are made we should be pretty ok!
 
-createHUDFont :: IO FontAndTexture
-createHUDFont = do
-  let fontCacheFilepath = "hudFont.tmp"
+createGUIFont :: IO FontAndTexture
+createGUIFont = do
+  let fontCacheFilepath = "guiFont.tmp"
   cachedFont <- readFromFile fontCacheFilepath
   case cachedFont of
     Just font -> putStrLn "Using cached font!" *> pure font

@@ -10,7 +10,7 @@ import Control.Exception (catch, ErrorCall)
 import Control.Monad (when, join)
 import Data.Foldable (toList)
 import Data.Vector.Generic (convert)
-import FontBuilder (Font, createHUDFont)
+import FontBuilder (Font, createGUIFont)
 import GHC.Exts (sortWith)
 import Graphics.GL
 import Graphics.UI.GLFW (Window, getFramebufferSize, swapBuffers)
@@ -19,7 +19,7 @@ import OpenGLHelpers
 import Program (Program(..), SceneInfo(..))
 
 sceneProgramSource = ("shaders/Scene.vert", "shaders/Scene.frag") :: (FilePath, FilePath)
-postProcessingProgramSource = ("shaders/HUD.vert", "shaders/HUD.frag") :: (FilePath, FilePath)
+postProcessingProgramSource = ("shaders/GUI.vert", "shaders/GUI.frag") :: (FilePath, FilePath)
 
 data GLState = GLState {
   dummyVAO :: GLuint,
@@ -41,7 +41,7 @@ createGLState (width, height) = do
   sceneTargetBuffer <- createSceneTargetBuffer sceneTargetTexture
   sceneProgram <- createGLSLProgram sceneProgramSource
   postProcessingProgram <- createGLSLProgram postProcessingProgramSource
-  (font, ((textureWidth, textureHeight), textureData)) <- createHUDFont
+  (font, ((textureWidth, textureHeight), textureData)) <- createGUIFont
   putStrLn $ "Font texture size is: " ++ show textureWidth ++ "x" ++ show textureHeight
   fontTextureId <- createFontTexture (fromIntegral textureWidth) (fromIntegral textureHeight) (convert textureData)
   let _font = (font, fontTextureId)
