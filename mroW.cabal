@@ -50,6 +50,7 @@ executable mroW-exe
                      , stm
   other-modules:       GLProgram
                      , OpenGLHelpers
+                     , Tools
   default-language:    Haskell2010
 
 test-suite mroW-test

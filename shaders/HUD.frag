@@ -23,18 +23,21 @@ float getDistanceToChar(vec4 charInfo)
         return texture2D(fontTexture, (charUV + charIndex) / 16).r;
 }
 
+float getDistanceToNumber(vec4 numberCharInfo)
+{
+    return getDistanceToChar(vec4(numberCharInfo.xyz, numberCharInfo.w + 48));
+}
+
 vec4 blendOnto(in vec4 a, in vec4 b)
 {
     return mix(a, b, b.w);
 }
 
-vec4 getCharColor(vec4 charInfo)
+vec4 getColor(float signedDistance)
 {
-    const float signedDistance = getDistanceToChar(charInfo);
-    
-    const float innerCenter = 0.65;
-    const float edgeCenter = 0.85;
-    const float extent = 0.1;
+    const float innerCenter = 0.503;
+    const float edgeCenter = 0.62;
+    const float extent = 0.01;
     const float edgeColorAlpha = smoothstep(edgeCenter + extent, edgeCenter - extent, signedDistance);
     const float innerColorAlpha = smoothstep(innerCenter + extent, innerCenter - extent, signedDistance);
     const vec4 color = blendOnto(
@@ -44,36 +47,9 @@ vec4 getCharColor(vec4 charInfo)
     return vec4(color.rgb, clamp(edgeColorAlpha, 0, 1));
 }
 
-vec4 getNumberChar(vec4 numberCharInfo)
+vec4 getCharColor(vec4 charInfo)
 {
-    return getCharColor(vec4(numberCharInfo.xyz, numberCharInfo.w + 17));
-}
-
-vec4 getTestText()
-{
-    if (screenUV.x > 0.20 || screenUV.y < 0.85 || screenUV.y > 0.97)
-        return vec4(0);
-
-    const float size = 0.1;
-    vec2 position = vec2(0.005, 0.85);
-   
-    const vec4 text[4] = vec4[4](
-        vec4(position + vec2(0, 0.15) * size, size, 53), // T
-        vec4(position + vec2(0.35, 0) * size, size, 38), // E
-        vec4(position + vec2(0.75, 0.05) * size, size, 52), // S
-        vec4(position + vec2(1.05, 0.1) * size, size, 53)  // T
-    );
-
-    return blendOnto(
-        blendOnto(
-            getCharColor(text[0]),
-            getCharColor(text[1])
-        ),
-        blendOnto(
-            getCharColor(text[2]),
-            getCharColor(text[3])
-        )
-    );
+    return getColor(getDistanceToChar(charInfo));
 }
 
 vec4 getNumberText(vec4 numberCharInfo)
@@ -84,26 +60,89 @@ vec4 getNumberText(vec4 numberCharInfo)
     vec2 position = numberCharInfo.xy;
     float size = numberCharInfo.z;
     float number = numberCharInfo.w;
-    vec4 textColor = vec4(0);
+    float distance = 1;
     for (int i = 0; i < 10; ++i)
     {
         number = floor(number) / 10;
         float numberChar = round(fract(number) * 10);
-        textColor = blendOnto(textColor, getNumberChar(vec4(position, size, numberChar)));
+        distance = min(distance, getDistanceToNumber(vec4(position, size, numberChar)));
         if (number < 1)
             break;
         position -= vec2(size * 0.5, 0);
     }
-    return textColor;
+    return getColor(distance);
+}
+
+vec4 getMenuStartText()
+{
+    const vec2 position = vec2(0.5, 0.6);
+    const float size = 0.0025;
+    const float size2 = 0.085;
+    const vec2 downLeft = vec2(-130.0,-8) * size + position;
+    const vec2 upRight = vec2(130.0,24) * size + position;
+    if (screenUV.x < downLeft.x || screenUV.x > upRight.x || screenUV.y < downLeft.y || screenUV.y > upRight.y)
+        return vec4(0.0);
+
+    const vec4 text[19] = vec4[19]( // Enter the mroW hole
+        vec4(position + vec2(-128.0,-3) * size, size2, 69), // 'E'
+        vec4(position + vec2(-113.0,-4) * size, size2, 110), // 'n'
+        vec4(position + vec2(-101.0,-5) * size, size2, 116), // 't'
+        vec4(position + vec2(-90.0,-5) * size, size2, 101), // 'e'
+        vec4(position + vec2(-73.0,-4) * size, size2, 114), // 'r'
+        vec4(position + vec2(-64.0,-3) * size, size2, 32), // ' '
+        vec4(position + vec2(-52.0,-5) * size, size2, 116), // 't'
+        vec4(position + vec2(-41.0,-4) * size, size2, 104), // 'h'
+        vec4(position + vec2(-28.0,-5) * size, size2, 101), // 'e'
+        vec4(position + vec2(-12.0,-3) * size, size2, 32), // ' '
+        vec4(position + vec2(0.0,-6) * size, size2, 109), // 'm'
+        vec4(position + vec2(19.0,-4) * size, size2, 114), // 'r'
+        vec4(position + vec2(29.0,-4) * size, size2, 111), // 'o'
+        vec4(position + vec2(42.0,-5) * size, size2, 87), // 'W'
+        vec4(position + vec2(62.0,-3) * size, size2, 32), // ' '
+        vec4(position + vec2(74.0,-4) * size, size2, 104), // 'h'
+        vec4(position + vec2(87.0,-4) * size, size2, 111), // 'o'
+        vec4(position + vec2(100.0,-6) * size, size2, 108), // 'l'
+        vec4(position + vec2(107.0,-5) * size, size2, 101) // 'e'
+    );
+    
+    float distance = 1;
+    for (int i = 0; i < 19; ++i)
+        distance = min(distance, getDistanceToChar(text[i]));
+    return getColor(distance);
+}
+
+vec4 getMenuExitText()
+{
+    const vec2 position = vec2(0.5, 0.5);
+    const float size = 0.0025;
+    const float size2 = 0.085;
+    const vec2 downLeft = vec2(-26.5,-8) * size + position;
+    const vec2 upRight = vec2(26.5,24) * size + position;
+    if (screenUV.x < downLeft.x || screenUV.x > upRight.x || screenUV.y < downLeft.y || screenUV.y > upRight.y)
+        return vec4(0.0);
+        
+    const vec4 text[4] = vec4[4](
+        vec4(position + vec2(-24.5,-3) * size, size2, 69), // 'E'
+        vec4(position + vec2(-9.5,-5) * size, size2, 120), // 'x'
+        vec4(position + vec2(5.5,-4) * size, size2, 105), // 'i'
+        vec4(position + vec2(9.5,-5) * size, size2, 116) // 't'
+    );
+
+    float distance = 1;
+    for (int i = 0; i < 4; ++i)
+        distance = min(distance, getDistanceToChar(text[i]));
+    return getColor(distance);
 }
 
 void main()
 {
     vec4 sceneColor = texture(sceneTexture, screenUV);
+    vec4 menuColor = blendOnto(getMenuStartText(), getMenuExitText());
     vec4 testFontColor = blendOnto(
-        getTestText(),
+        menuColor,
         getNumberText(vec4(0.85, 0.8, 0.15, float(gPoints)))
     );
+
     vec4 finalColor = blendOnto(sceneColor, testFontColor);
     gl_FragColor = pow(finalColor, vec4(1.0/2.2)); // gamma corrected
 }
