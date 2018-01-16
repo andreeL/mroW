@@ -81,10 +81,10 @@ extractFTGlyph ftGlyphSlot = do
   ftMetrics <- peek $ metrics ftGlyphSlot
   ftBitmap <- peek $ bitmap ftGlyphSlot
   let buffer = FTB.buffer ftBitmap
-  let norm = (`div` 64) . fromIntegral
-  let _size = (fromIntegral $ FTB.width ftBitmap, fromIntegral $ FTB.rows ftBitmap)
-  let _bearing = (norm . FTGM.horiBearingX $ ftMetrics, norm . FTGM.horiBearingY $ ftMetrics)
-  let _advance = norm . FTGM.horiAdvance $ ftMetrics
+      normalize = (`div` 64) . fromIntegral
+      _size = (fromIntegral $ FTB.width ftBitmap, fromIntegral $ FTB.rows ftBitmap)
+      _bearing = (normalize . FTGM.horiBearingX $ ftMetrics, normalize . FTGM.horiBearingY $ ftMetrics)
+      _advance = normalize . FTGM.horiAdvance $ ftMetrics
   _image <- generateM (uncurry (*) _size) (fmap fromIntegral . peekElemOff buffer)
   pure FTGlyph{..}
 
