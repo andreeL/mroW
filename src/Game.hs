@@ -11,13 +11,13 @@ import Data.Maybe (isJust)
 import GameState
 import Lens.Micro.Platform
 import Player (Player, PlayerInput(..))
-import Program (EventHandler, Event(..), SceneInfo(..), Program(..))
+import Program (EventHandler, Event(..), SceneInfo(..), Command(..))
 import qualified Graphics.UI.GLFW as GLFW
 
-type ProgramBuilder = GameState -> (Program, GameState)
+type ProgramBuilder = GameState -> ([Command], GameState)
 
 createGame :: GameState -> EventHandler
-createGame state = bScanSplit (flip handleEvent) state
+createGame = bScanSplit (flip handleEvent)
 
 handleEvent :: Event -> ProgramBuilder
 handleEvent (KeyEvent key scancode action mods) = handleKeyEvent key scancode action mods
@@ -49,13 +49,13 @@ handleKeyEvent key scancode action mods state =
           _ -> state'
         else state'
   
-  in (NoOp, state'')
+  in ([], state'')
 
 handleMouseEvent :: (Double, Double) -> ProgramBuilder
-handleMouseEvent mousePos state = (NoOp, snd . setMousePos mousePos $ state)
+handleMouseEvent mousePos state = ([], snd . setMousePos mousePos $ state)
 
 handleUpdateEvent :: (GameState -> GameState) -> ProgramBuilder
-handleUpdateEvent f state = (NoOp, f state)
+handleUpdateEvent f state = ([], f state)
 
 handleTickEvent :: Double -> DeltaTime -> ProgramBuilder
 handleTickEvent time deltaTime state = let
@@ -80,7 +80,7 @@ handleTickEvent time deltaTime state = let
   _variables = state ^. variables
   (_lastCameraPlacement, _camera) = getBehaviour (state ^. camera) cameraInput
 
-  in (NoOp, GameState{..})
+  in ([], GameState{..})
 
 handleRenderEvent :: ProgramBuilder
 handleRenderEvent state =
@@ -89,4 +89,4 @@ handleRenderEvent state =
       _player = state' ^. lastPlayerPosition
       _mousePos = getMousePos state'
       _points = getPoints state'
-  in (RenderScene SceneInfo{..}, state')
+  in ([RenderScene SceneInfo{..}], state')

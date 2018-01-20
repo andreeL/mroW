@@ -1,8 +1,9 @@
 {-# LANGUAGE RecordWildCards #-}
+
 module GLProgram
-  ( GLState(..)
+  ( GLState
   , createGLState
-  , runProgram
+  , renderScene
   ) where
 
 import Common
@@ -16,45 +17,41 @@ import Graphics.GL
 import Graphics.UI.GLFW (Window, getFramebufferSize, swapBuffers)
 import Linear (V3(..), V4(..))
 import OpenGLHelpers
-import Program (Program(..), SceneInfo(..))
+import Program (SceneInfo(..))
 
 sceneProgramSource = ("shaders/Scene.vert", "shaders/Scene.frag") :: (FilePath, FilePath)
 postProcessingProgramSource = ("shaders/GUI.vert", "shaders/GUI.frag") :: (FilePath, FilePath)
 
 data GLState = GLState {
-  dummyVAO :: GLuint,
-  emptyBO :: GLuint,
-  sceneTargetSize :: (GLsizei, GLsizei),
-  sceneTargetTexture :: GLuint,
-  sceneTargetBuffer :: GLuint,
-  sceneProgram :: GLSLProgram,
-  postProcessingProgram :: GLSLProgram,
+  _dummyVAO :: GLuint,
+  _emptyBO :: GLuint,
+  _sceneTargetSize :: (GLsizei, GLsizei),
+  _sceneTargetTexture :: GLuint,
+  _sceneTargetBuffer :: GLuint,
+  _sceneProgram :: GLSLProgram,
+  _postProcessingProgram :: GLSLProgram,
   _font :: (Font, GLuint)
 }
 
 createGLState :: (Int, Int) -> IO GLState
 createGLState (width, height) = do
-  dummyVAO <- createVAO
-  emptyBO <- createEmptyBO 0
-  let sceneTargetSize = (fromIntegral width, fromIntegral height)
-  sceneTargetTexture <- createSceneTargetTexture (fst sceneTargetSize) (snd sceneTargetSize)
-  sceneTargetBuffer <- createSceneTargetBuffer sceneTargetTexture
-  sceneProgram <- createGLSLProgram sceneProgramSource
-  postProcessingProgram <- createGLSLProgram postProcessingProgramSource
+  _dummyVAO <- createVAO
+  _emptyBO <- createEmptyBO 0
+  let _sceneTargetSize = (fromIntegral width, fromIntegral height)
+  _sceneTargetTexture <- createSceneTargetTexture (fst _sceneTargetSize) (snd _sceneTargetSize)
+  _sceneTargetBuffer <- createSceneTargetBuffer _sceneTargetTexture
+  _sceneProgram <- createGLSLProgram sceneProgramSource
+  _postProcessingProgram <- createGLSLProgram postProcessingProgramSource
   (font, ((textureWidth, textureHeight), textureData)) <- createGUIFont
   putStrLn $ "Font texture size is: " ++ show textureWidth ++ "x" ++ show textureHeight
   fontTextureId <- createFontTexture (fromIntegral textureWidth) (fromIntegral textureHeight) (convert textureData)
   let _font = (font, fontTextureId)
   pure GLState{..}
 
-runProgram :: (Double, Window, GLState) -> Program -> IO ()
-runProgram (_, _, glState) (NoOp)                  = pure ()
-runProgram state           (RenderScene sceneInfo) = renderScene state sceneInfo
-
-renderScene :: (Double, Window, GLState) -> SceneInfo -> IO ()
-renderScene (time, window, progGLState@GLState{..}) sceneInfo = do
+renderScene :: SceneInfo -> Double -> Window -> GLState -> IO GLState
+renderScene sceneInfo time window glState@GLState{..} = do
   when (_shadersAreDirty sceneInfo) $ do
-    recreateGLSLPrograms progGLState
+    recreateGLSLPrograms glState
   let (mouseX, mouseY) = _mousePos sceneInfo
 
   -- pre render
@@ -63,8 +60,8 @@ renderScene (time, window, progGLState@GLState{..}) sceneInfo = do
   let fov = if aspectRatio > 1.0 then (aspectRatio, 1.0) else (1.0, 1 / aspectRatio)
   let withFullscreenGLSLProgram targetBuffer (width, height) program setupAction = do
         -- for now we just treat the VAO as a GL requirement, and ignore it
-        glBindVertexArray dummyVAO
-        glBindVertexBuffer 0 emptyBO 0 0
+        glBindVertexArray _dummyVAO
+        glBindVertexBuffer 0 _emptyBO 0 0
 
         glBindFramebuffer GL_FRAMEBUFFER targetBuffer
         glDisable GL_DEPTH_TEST
@@ -82,16 +79,16 @@ renderScene (time, window, progGLState@GLState{..}) sceneInfo = do
         glDrawArrays GL_TRIANGLES 0 3
 
   -- render scene
-  withFullscreenGLSLProgram sceneTargetBuffer sceneTargetSize sceneProgram $ \programId -> do
+  withFullscreenGLSLProgram _sceneTargetBuffer _sceneTargetSize _sceneProgram $ \programId -> do
     let (V3 pX pY pZ) = _player sceneInfo
     setFloat3 programId "playerPosition" Nothing (realToFrac pX) (realToFrac pY) (realToFrac pZ)
     let closestObjects = buildClosestObjectList 100 (testObjects time)
     setFloat4Array programId "objects" Nothing (fmap realToFrac . concatMap toList $ closestObjects)
 
   -- copy scene to main buffer with post processing
-  withFullscreenGLSLProgram 0 (fromIntegral width, fromIntegral height) postProcessingProgram $ \programId -> do
+  withFullscreenGLSLProgram 0 (fromIntegral width, fromIntegral height) _postProcessingProgram $ \programId -> do
     glActiveTexture GL_TEXTURE0
-    glBindTexture GL_TEXTURE_2D sceneTargetTexture
+    glBindTexture GL_TEXTURE_2D _sceneTargetTexture
     setInt programId "sceneTexture" Nothing 0
     glActiveTexture GL_TEXTURE1
     glBindTexture GL_TEXTURE_2D (snd _font)
@@ -102,10 +99,13 @@ renderScene (time, window, progGLState@GLState{..}) sceneInfo = do
   -- post render
   swapBuffers window
 
+  -- pass on the possibly changed GLState
+  pure glState
+
 recreateGLSLPrograms :: GLState -> IO ()
 recreateGLSLPrograms GLState{..} = catch (do
-    recreateGLSLProgram sceneProgram sceneProgramSource
-    recreateGLSLProgram postProcessingProgram postProcessingProgramSource
+    recreateGLSLProgram _sceneProgram sceneProgramSource
+    recreateGLSLProgram _postProcessingProgram postProcessingProgramSource
   ) failHandler
   where
     failHandler :: ErrorCall -> IO ()

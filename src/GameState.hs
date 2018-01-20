@@ -1,16 +1,17 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
+
 module GameState where
 
-import Prelude hiding (lookup)
 import Camera (Camera, CameraMode(..), createCamera, nextCameraMode)
 import Common
 import Data.Map (Map, empty, insert, delete, lookup)
 import Data.Maybe (isJust, fromMaybe)
-import Text.Read (readMaybe)
-import Player (Player, createPlayer)
 import Lens.Micro.Platform
 import Linear (V3(..), Quaternion(..), fromQuaternion, zero)
+import Player (Player, createPlayer)
+import Prelude hiding (lookup)
+import Text.Read (readMaybe)
 
 varActionUp     = "up"
 varActionLeft   = "left"

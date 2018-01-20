@@ -8,7 +8,7 @@ import Common
 import Data.Maybe (isJust, fromMaybe)
 import Game (createGame)
 import GameState (createGameState)
-import Program (EventHandler, Event(..), Program(..))
+import Program (EventHandler, Event(..), Command(..))
 import qualified Graphics.UI.GLFW as GLFW
 
 -- For now, for simplicity, we say that the menu always exist, and is the owner of the game
@@ -17,7 +17,7 @@ data MenuState = MenuState {
   _game :: Maybe EventHandler
 }
 
-type ProgramBuilder = MenuState -> (Program, MenuState)
+type ProgramBuilder = MenuState -> ([Command], MenuState)
 
 createMenuState :: MenuState
 createMenuState = MenuState {
@@ -25,7 +25,7 @@ createMenuState = MenuState {
 }
 
 createMenu :: MenuState -> EventHandler
-createMenu state = bScanSplit (flip handleEvent) state
+createMenu = bScanSplit (flip handleEvent)
 
 handleEvent :: Event -> ProgramBuilder
 handleEvent (KeyEvent key scancode action mods) = handleKeyEvent key scancode action mods
@@ -35,7 +35,11 @@ handleEvent (RenderEvent)                       = handleRenderEvent
 
 -- TODO: these are just temporay implementations and will be replaced completely
 handleKeyEvent :: GLFW.Key -> Int -> GLFW.KeyState -> GLFW.ModifierKeys -> ProgramBuilder
-handleKeyEvent key scancode action mods = withGame (\game -> getBehaviour game (KeyEvent key scancode action mods))
+handleKeyEvent key scancode action mods menuState =
+  case key of
+    GLFW.Key'Up -> ([Log ("Up" ++ show action)], menuState)
+    GLFW.Key'Down -> ([Log ("Down" ++ show action)], menuState)
+    _ -> withGame (\game -> getBehaviour game (KeyEvent key scancode action mods)) menuState
 
 handleMouseEvent :: Double -> Double -> ProgramBuilder
 handleMouseEvent x y = withGame (\game -> getBehaviour game (MouseEvent x y))

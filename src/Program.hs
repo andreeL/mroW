@@ -4,7 +4,7 @@ import Behaviour (Behaviour)
 import Common (Placement, Position, DeltaTime)
 import Graphics.UI.GLFW (Key, KeyState, ModifierKeys)
 
-type EventHandler = Behaviour Event Program
+type EventHandler = Behaviour Event [Command]
 
 -- events
 data Event = KeyEvent Key Int KeyState ModifierKeys
@@ -21,5 +21,5 @@ data SceneInfo = SceneInfo {
   _points :: Int
 }
 
-data Program = NoOp
-             | RenderScene SceneInfo
+data Command = RenderScene SceneInfo
+             | Log String
