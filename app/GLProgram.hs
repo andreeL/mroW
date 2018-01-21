@@ -3,7 +3,8 @@
 module GLProgram
   ( GLState
   , createGLState
-  , renderScene
+  , reloadShaders
+  , render
   ) where
 
 import Common
@@ -17,7 +18,7 @@ import Graphics.GL
 import Graphics.UI.GLFW (Window, getFramebufferSize, swapBuffers)
 import Linear (V3(..), V4(..))
 import OpenGLHelpers
-import Program (SceneInfo(..))
+import Program (SceneState(..), GUIState(..))
 
 sceneProgramSource = ("shaders/Scene.vert", "shaders/Scene.frag") :: (FilePath, FilePath)
 postProcessingProgramSource = ("shaders/GUI.vert", "shaders/GUI.frag") :: (FilePath, FilePath)
@@ -48,69 +49,69 @@ createGLState (width, height) = do
   let _font = (font, fontTextureId)
   pure GLState{..}
 
-renderScene :: SceneInfo -> Double -> Window -> GLState -> IO GLState
-renderScene sceneInfo time window glState@GLState{..} = do
-  when (_shadersAreDirty sceneInfo) $ do
-    recreateGLSLPrograms glState
-  let (mouseX, mouseY) = _mousePos sceneInfo
-
-  -- pre render
-  (width, height) <- getFramebufferSize window
-  let aspectRatio = fromIntegral width / fromIntegral height
-  let fov = if aspectRatio > 1.0 then (aspectRatio, 1.0) else (1.0, 1 / aspectRatio)
-  let withFullscreenGLSLProgram targetBuffer (width, height) program setupAction = do
-        -- for now we just treat the VAO as a GL requirement, and ignore it
-        glBindVertexArray _dummyVAO
-        glBindVertexBuffer 0 _emptyBO 0 0
-
-        glBindFramebuffer GL_FRAMEBUFFER targetBuffer
-        glDisable GL_DEPTH_TEST
-        glViewport 0 0 width height
-
-        let programId = getProgramId program
-        glUseProgram programId
-        setFloat programId "fTime" Nothing (realToFrac time)
-        setFloat2 programId "fFov" Nothing (fst fov) (snd fov)
-        setFloat2 programId "fMouse" Nothing (realToFrac mouseX) (realToFrac mouseY)
-        let (V3 eyeX eyeY eyeZ, eyeRotation) = _camera sceneInfo
-        setFloat3 programId "eyePosition" Nothing (realToFrac eyeX) (realToFrac eyeY) (realToFrac eyeZ)
-        setMatrix33 programId "eyeRotation" Nothing (fmap realToFrac . join . fmap toList . toList $ eyeRotation)
-        setupAction programId
-        glDrawArrays GL_TRIANGLES 0 3
-
-  -- render scene
-  withFullscreenGLSLProgram _sceneTargetBuffer _sceneTargetSize _sceneProgram $ \programId -> do
-    let (V3 pX pY pZ) = _player sceneInfo
-    setFloat3 programId "playerPosition" Nothing (realToFrac pX) (realToFrac pY) (realToFrac pZ)
-    let closestObjects = buildClosestObjectList 100 (testObjects time)
-    setFloat4Array programId "objects" Nothing (fmap realToFrac . concatMap toList $ closestObjects)
-
-  -- copy scene to main buffer with post processing
-  withFullscreenGLSLProgram 0 (fromIntegral width, fromIntegral height) _postProcessingProgram $ \programId -> do
-    glActiveTexture GL_TEXTURE0
-    glBindTexture GL_TEXTURE_2D _sceneTargetTexture
-    setInt programId "sceneTexture" Nothing 0
-    glActiveTexture GL_TEXTURE1
-    glBindTexture GL_TEXTURE_2D (snd _font)
-    setInt programId "fontTexture" Nothing 1
-    setFloat2 programId "fMouse" Nothing 0 0
-    setInt programId "gPoints" Nothing (fromIntegral . _points $ sceneInfo)
-
-  -- post render
-  swapBuffers window
-
-  -- pass on the possibly changed GLState
-  pure glState
-
-recreateGLSLPrograms :: GLState -> IO ()
-recreateGLSLPrograms GLState{..} = catch (do
+reloadShaders :: GLState -> IO ()
+reloadShaders GLState{..} = catch (do
     recreateGLSLProgram _sceneProgram sceneProgramSource
     recreateGLSLProgram _postProcessingProgram postProcessingProgramSource
   ) failHandler
   where
     failHandler :: ErrorCall -> IO ()
     failHandler _ = putStrLn $ "Failed to update all shaders!"
+
+render :: Double -> Window -> SceneState -> GUIState -> GLState -> IO GLState
+render time window sceneState guiState glState = do
+  glState' <-
+    pure glState >>=
+    renderScene time sceneState >>=
+    renderGUI time window guiState
+  swapBuffers window
+  pure glState'
+
+renderScene :: Double -> SceneState -> GLState -> IO GLState
+renderScene time sceneState glState@GLState{..} = do
+  withFullscreenGLSLProgram _dummyVAO _emptyBO _sceneTargetBuffer _sceneTargetSize _sceneProgram $ \programId -> do
+    let (V3 pX pY pZ) = _player sceneState
+    setFloat programId "fTime" Nothing (realToFrac time)
+    setFloat3 programId "playerPosition" Nothing (realToFrac pX) (realToFrac pY) (realToFrac pZ)
+    let closestObjects = buildClosestObjectList 100 (testObjects time)
+    setFloat4Array programId "objects" Nothing (fmap realToFrac . concatMap toList $ closestObjects)
+    let (V3 eyeX eyeY eyeZ, eyeRotation) = _camera sceneState
+    setFloat3 programId "eyePosition" Nothing (realToFrac eyeX) (realToFrac eyeY) (realToFrac eyeZ)
+    setMatrix33 programId "eyeRotation" Nothing (fmap realToFrac . join . fmap toList . toList $ eyeRotation)
+  pure glState
+
+renderGUI :: Double -> Window -> GUIState -> GLState -> IO GLState
+renderGUI time window guiState glState@GLState{..} = do
+  (width, height) <- getFramebufferSize window
+  withFullscreenGLSLProgram _dummyVAO _emptyBO 0 (fromIntegral width, fromIntegral height) _postProcessingProgram $ \programId -> do
+    glActiveTexture GL_TEXTURE0
+    glBindTexture GL_TEXTURE_2D _sceneTargetTexture
+    setFloat programId "fTime" Nothing (realToFrac time)
+    setInt programId "sceneTexture" Nothing 0
+    glActiveTexture GL_TEXTURE1
+    glBindTexture GL_TEXTURE_2D (snd _font)
+    setInt programId "fontTexture" Nothing 1
+    setInt programId "gPoints" Nothing (fromIntegral . _points $ guiState)
+  pure glState
+
+withFullscreenGLSLProgram dummyVAO emptyBO targetBuffer (width, height) program setupAction = do
+  let aspectRatio = fromIntegral width / fromIntegral height
+  let fov = if aspectRatio > 1.0 then (aspectRatio, 1.0) else (1.0, 1 / aspectRatio)
   
+  -- for now we just treat the VAO as a GL requirement, and ignore it
+  glBindVertexArray dummyVAO
+  glBindVertexBuffer 0 emptyBO 0 0
+
+  glBindFramebuffer GL_FRAMEBUFFER targetBuffer
+  glDisable GL_DEPTH_TEST
+  glViewport 0 0 width height
+
+  let programId = getProgramId program
+  glUseProgram programId
+  setFloat2 programId "fFov" Nothing (fst fov) (snd fov)
+  setupAction programId
+  glDrawArrays GL_TRIANGLES 0 3
+
 -- this is just tempoary
 testObjects :: Double -> [V4 Float]
 testObjects time =

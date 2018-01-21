@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Main where
 
 import Behaviour (Behaviour(..))
@@ -6,9 +8,9 @@ import Control.Concurrent.STM
 import Control.Monad
 import Data.Maybe (fromMaybe)
 import Menu (createMenu, createMenuState)
-import GLProgram (GLState, createGLState, renderScene)
+import GLProgram (GLState, createGLState, reloadShaders, render)
 import qualified Graphics.UI.GLFW as GLFW
-import Program (EventHandler, Event(..), Command(..))
+import Program (EventHandler, Event(..), SceneState, createSceneState, GUIState, createGUIState, Command(..))
 
 defaultWindowSize = (960, 540) :: (Int, Int)
 --defaultWindowSize = (1728, 972) :: (Int, Int)
@@ -29,6 +31,21 @@ withGLFW program = do
 
 type EventQueue = Control.Concurrent.STM.TQueue Event
 
+data ProgramState = ProgramState {
+  _sceneState :: SceneState,
+  _guiState :: GUIState,
+  _glState :: GLState
+}
+
+createProgramState :: IO ProgramState
+createProgramState = do
+  glState <- createGLState defaultWindowSize
+  pure ProgramState{
+    _sceneState = createSceneState,
+    _guiState = createGUIState,
+    _glState = glState
+  }
+
 main :: IO ()
 main = do
   withGLFW $ do
@@ -39,7 +56,7 @@ main = do
         GLFW.makeContextCurrent (Just window)
         GLFW.swapInterval 1 -- assuming this enables vsync (doesn't work on my machine)
         eventQueue <- newTQueueIO
-        progGLState <- createGLState defaultWindowSize
+        programState <- createProgramState
         GLFW.setKeyCallback window (Just $ \window key scancode action mods -> do
           let pressed = action /= GLFW.KeyState'Released
           when pressed $ do
@@ -50,11 +67,11 @@ main = do
           atomically $ writeTQueue eventQueue $ MouseEvent x y
           )
         time <- fmap (fromMaybe 0) GLFW.getTime
-        runLoop time eventQueue (createMenu createMenuState) progGLState window
+        runLoop time eventQueue (createMenu createMenuState) programState window
         GLFW.destroyWindow window
 
-runLoop :: Double -> EventQueue -> EventHandler -> GLState -> GLFW.Window -> IO ()
-runLoop previousTime eventQueue eventHandler glState window = do
+runLoop :: Double -> EventQueue -> EventHandler -> ProgramState -> GLFW.Window -> IO ()
+runLoop previousTime eventQueue eventHandler programState window = do
   GLFW.pollEvents
   windowShouldClose <- GLFW.windowShouldClose window
   case windowShouldClose of
@@ -63,29 +80,33 @@ runLoop previousTime eventQueue eventHandler glState window = do
       time <- fmap (fromMaybe 0) GLFW.getTime
       let deltaTime = DeltaTime {getSeconds = realToFrac . max 0 . min 1 $ (time - previousTime)}
 
-      let runCommand :: GLState -> Command -> IO GLState
-          runCommand glState (RenderScene sceneInfo) = renderScene sceneInfo time window glState
-          runCommand glState (Log log              ) = putStrLn ("Log: " ++ log) *> pure glState
+      let runCommand :: ProgramState -> Command -> IO ProgramState
+          runCommand programState@ProgramState{..} (ReloadShaders) = reloadShaders _glState *> pure programState
+          runCommand programState@ProgramState{..} (UpdateScene f) = pure ProgramState {_sceneState = f _sceneState, _guiState = _guiState, _glState = _glState}
+          runCommand programState@ProgramState{..} (UpdateGUI f  ) = pure ProgramState {_sceneState = _sceneState, _guiState = f _guiState, _glState = _glState}
+          runCommand programState@ProgramState{..} (Log log      ) = putStrLn ("Log: " ++ log) *> pure programState
 
-      let handleEvent :: Event -> (GLState, EventHandler) -> IO (GLState, EventHandler)
-          handleEvent event (glState, eventHandler) = do
+      let handleEvent :: Event -> (ProgramState, EventHandler) -> IO (ProgramState, EventHandler)
+          handleEvent event (programState, eventHandler) = do
             let (program, eventHandler') = getBehaviour eventHandler $ event
-            glState' <- foldM runCommand glState program
-            pure (glState', eventHandler')
+            programState' <- foldM runCommand programState program
+            pure (programState', eventHandler')
          
-      let handleQueuedEvents :: (GLState, EventHandler) -> IO (GLState, EventHandler)
-          handleQueuedEvents (glState, eventHandler) = do
+      let handleQueuedEvents :: (ProgramState, EventHandler) -> IO (ProgramState, EventHandler)
+          handleQueuedEvents (programState, eventHandler) = do
             maybeEvent <- atomically $ tryReadTQueue eventQueue
             case maybeEvent of
               Just event -> do
-                (glState', eventHandler') <- handleEvent event (glState, eventHandler)
-                handleQueuedEvents (glState', eventHandler')
-              Nothing -> pure (glState, eventHandler)
+                (programState', eventHandler') <- handleEvent event (programState, eventHandler)
+                handleQueuedEvents (programState', eventHandler')
+              Nothing -> pure (programState, eventHandler)
 
       -- handle events
-      (glState', eventHandler') <-
-        pure (glState, eventHandler) >>=
+      (ProgramState sceneState guiState glState, eventHandler') <-
+        pure (programState, eventHandler) >>=
         handleQueuedEvents >>=
         handleEvent (TickEvent time deltaTime) >>=
-        handleEvent RenderEvent
-      runLoop time eventQueue eventHandler' glState window
+        handleEvent UpdateRenderStates
+
+      glState' <- render time window sceneState guiState glState
+      runLoop time eventQueue eventHandler' (ProgramState sceneState guiState glState') window

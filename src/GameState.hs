@@ -19,7 +19,6 @@ varActionDown   = "down"
 varActionRight  = "right"
 varPoints       = "points"
 varMousePos     = "mousePos"
-varDirtyShaders = "dirtyShaders"
 varCameraMode   = "cameraMode"
 
 type VariableName = String
@@ -43,14 +42,6 @@ createGameState = let
   _camera = createCamera CinematicCamera
   _player = createPlayer zero
   in GameState{..}
-
-setDirtyShadersFlag :: GameState -> ((), GameState)
-setDirtyShadersFlag = setVariable varDirtyShaders ""
-
-extractDirtyShadersFlag :: GameState -> (Bool, GameState)
-extractDirtyShadersFlag gameState =
-  let dirtyShader = isJust . getVariable varDirtyShaders $ gameState
-  in (dirtyShader, snd . removeVariable varDirtyShaders $ gameState)
 
 setMousePos :: (Double, Double) -> GameState -> ((), GameState)
 setMousePos newMousePos = storeVariable varMousePos newMousePos

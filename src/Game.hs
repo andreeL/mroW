@@ -11,7 +11,7 @@ import Data.Maybe (isJust)
 import GameState
 import Lens.Micro.Platform
 import Player (Player, PlayerInput(..))
-import Program (EventHandler, Event(..), SceneInfo(..), Command(..))
+import Program (EventHandler, Event(..), SceneState(..), GUIState(..), Command(..))
 import qualified Graphics.UI.GLFW as GLFW
 
 type ProgramBuilder = GameState -> ([Command], GameState)
@@ -23,7 +23,7 @@ handleEvent :: Event -> ProgramBuilder
 handleEvent (KeyEvent key scancode action mods) = handleKeyEvent key scancode action mods
 handleEvent (MouseEvent x y)                    = handleMouseEvent (x, y)
 handleEvent (TickEvent time deltaTime)          = handleTickEvent time deltaTime
-handleEvent (RenderEvent)                       = handleRenderEvent
+handleEvent (UpdateRenderStates)                = handleUpdateRenderStatesEvent
 
 setOrRemove :: VariableName -> VariableValue -> Bool -> GameState -> GameState
 setOrRemove variableName variableValue doSet =
@@ -43,7 +43,6 @@ handleKeyEvent key scancode action mods state =
 
       state'' = if action == GLFW.KeyState'Pressed then
         case key of
-          GLFW.Key'F1 -> snd . setDirtyShadersFlag $ state'
           GLFW.Key'F2 -> snd . useNextCameraMode $ state'
           GLFW.Key'Space -> snd . addPoints 1 $ state'
           _ -> state'
@@ -82,11 +81,13 @@ handleTickEvent time deltaTime state = let
 
   in ([], GameState{..})
 
-handleRenderEvent :: ProgramBuilder
-handleRenderEvent state =
-  let (_shadersAreDirty, state') = extractDirtyShadersFlag state
-      _camera = state' ^. lastCameraPlacement
-      _player = state' ^. lastPlayerPosition
-      _mousePos = getMousePos state'
-      _points = getPoints state'
-  in ([RenderScene SceneInfo{..}], state')
+handleUpdateRenderStatesEvent :: ProgramBuilder
+handleUpdateRenderStatesEvent state =
+  let sceneState = SceneState { _camera = state ^. lastCameraPlacement,
+                                _player = state ^. lastPlayerPosition
+                              }
+      guiState = GUIState { _points = getPoints state }
+      commands = [ UpdateScene (const sceneState),
+                   UpdateGUI (const guiState)
+                 ]
+  in (commands, state)
