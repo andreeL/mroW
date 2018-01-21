@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Menu (
   createMenuState,
@@ -11,7 +12,8 @@ import Data.Foldable (asum)
 import Data.Maybe (isJust, fromMaybe)
 import Game (createGame)
 import GameState (createGameState)
-import Program (EventHandler, Event(..), GUIState(..), Command(..))
+import Lens.Micro.Platform
+import Program (EventHandler, Event(..), GUIState(..), Command(..), currentMenuOption)
 import qualified Graphics.UI.GLFW as GLFW
 
 data MenuOption = StartGame
@@ -24,7 +26,7 @@ type Menu = (Int, [MenuOption])
 -- This might change in the future though
 data MenuState = MenuState {
   _game :: Maybe EventHandler,
-  _menu :: Menu
+  _menu :: Maybe Menu
 }
 
 type ProgramBuilder = MenuState -> ([Command], MenuState)
@@ -32,7 +34,7 @@ type ProgramBuilder = MenuState -> ([Command], MenuState)
 createMenuState :: MenuState
 createMenuState = MenuState {
   _game = Nothing,
-  _menu = (0, mainMenuOptions)
+  _menu = Just (0, mainMenuOptions)
 }
 
 createMenu :: MenuState -> EventHandler
@@ -50,12 +52,30 @@ handleKeyEvent key scancode action mods menuState = fromMaybe ([], menuState) $ 
   [ if action == GLFW.KeyState'Pressed then
       case key of
         GLFW.Key'F1 -> Just ([MarkShadersAsDirty], menuState)
-        GLFW.Key'Up -> let menuState' = moveMenuOption (-1) menuState in Just ([Log (show.fst._menu $ menuState')], menuState')
-        GLFW.Key'Down -> let menuState' = moveMenuOption 1 menuState in Just ([Log (show.fst._menu $ menuState')], menuState')
+        GLFW.Key'Up -> Just ([], moveMenuOption (-1) menuState)
+        GLFW.Key'Down -> Just ([], moveMenuOption 1 menuState)
+        GLFW.Key'Escape -> Just ([], toggleMenu menuState)
+        GLFW.Key'Enter -> Just (handleEnterPressedEvent menuState)
         _ -> Nothing
       else Nothing
   , Just $ withGame (\game -> getBehaviour game (KeyEvent key scancode action mods)) menuState
   ]
+
+toggleMenu :: MenuState -> MenuState
+toggleMenu MenuState{..} = MenuState{
+    _game = _game,
+    _menu = case _menu of
+      Just menu -> Nothing
+      Nothing -> Just (0, mainMenuOptions)
+  }
+
+handleEnterPressedEvent :: ProgramBuilder
+handleEnterPressedEvent menuState@MenuState{..} = fromMaybe ([], menuState) $ case _menu of
+    Just menu -> case ((snd menu) ^? ix (fst menu)) of
+      Just StartGame -> Just ([], startGame menuState)
+      Just Exit -> Just ([Terminate], menuState)
+      _ -> Nothing
+    Nothing -> Nothing
 
 handleMouseEvent :: Double -> Double -> ProgramBuilder
 handleMouseEvent x y = withGame (\game -> getBehaviour game (MouseEvent x y))
@@ -66,15 +86,25 @@ handleTickEvent time deltaTime = withGame (\game -> getBehaviour game (TickEvent
 handleUpdateRenderStatesEvent :: ProgramBuilder
 handleUpdateRenderStatesEvent menuState =
   let (commands, menuState') = withGame (\game -> getBehaviour game UpdateRenderStates) menuState
-   in (commands ++ [], menuState') -- TODO...
+   in (commands ++ [UpdateGUI $ \guiState -> guiState & currentMenuOption .~ (fmap fst . _menu $ menuState)], menuState') -- TODO...
 
 moveMenuOption :: Int -> MenuState -> MenuState
-moveMenuOption steps (MenuState game (currentIndex, menuOptions)) = MenuState game ((currentIndex + steps) `mod` (length menuOptions), menuOptions)
+moveMenuOption steps MenuState{..} = MenuState{
+    _game = _game,
+    _menu = fmap move _menu
+  }
+  where move (currentIndex, menuOptions) = ((currentIndex + steps) `mod` (length menuOptions), menuOptions)
 
--- TODO: just for testing
-withGame :: (EventHandler -> (a, EventHandler)) -> MenuState -> (a, MenuState)
-withGame f MenuState{..} =
-  let game = fromMaybe (createGame createGameState) _game
-      (commands, game') = f game
-  in (commands, MenuState{_game = Just game', _menu = _menu})
-  
+startGame :: MenuState -> MenuState
+startGame MenuState{..} = MenuState{
+    _game = Just . fromMaybe (createGame createGameState) $ _game,
+    _menu = Nothing
+  }
+
+withGame :: (EventHandler -> ([Command], EventHandler)) -> MenuState -> ([Command], MenuState)
+withGame f menuState@MenuState{..} =
+  if (isJust _menu)
+  then ([], menuState)
+  else case _game of
+    Just game -> let (commands, game') = f game in (commands, MenuState{_game = Just game', _menu = _menu})
+    Nothing -> ([], menuState)

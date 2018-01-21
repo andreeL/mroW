@@ -4,9 +4,15 @@ varying vec2 screenUV;
 varying vec2 screenXY;
 uniform float fTime = 0;
 uniform int gPoints = 0;
+uniform int gCurrentMenuOption = -1;
 
 uniform sampler2D sceneTexture;
 uniform sampler2D fontTexture;
+
+const vec4 defaultTextInnerColor = vec4(0.3, 0.0, 0.01, 1);
+const vec4 defaultTextOuterColor = vec4(0.8, 0.7, 0.1, 1);
+const vec4 selectedTextInnerColor = vec4(1.0, 0.0, 0.01, 1);
+const vec4 selectedTextOuterColor = vec4(1.0, 0.7, 0.1, 1);
 
 float getDistanceToChar(vec4 charInfo)
 {
@@ -32,7 +38,7 @@ vec4 blendOnto(in vec4 a, in vec4 b)
     return mix(a, b, b.w);
 }
 
-vec4 getColor(float signedDistance)
+vec4 getColor(in float signedDistance, in vec4 color1, in vec4 color2)
 {
     const float innerCenter = 0.503;
     const float edgeCenter = 0.62;
@@ -40,15 +46,18 @@ vec4 getColor(float signedDistance)
     const float edgeColorAlpha = smoothstep(edgeCenter + extent, edgeCenter - extent, signedDistance);
     const float innerColorAlpha = smoothstep(innerCenter + extent, innerCenter - extent, signedDistance);
     const vec4 color = blendOnto(
-        vec4(0.3, 0.0, 0.01, 1),
-        vec4(0.8, 0.7, 0.1, innerColorAlpha)
+        color1,
+        vec4(color2.xyz, color2.w * innerColorAlpha)
         );
     return vec4(color.rgb, clamp(edgeColorAlpha, 0, 1));
 }
 
-vec4 getCharColor(vec4 charInfo)
+vec4 getMenuTextColor(in float signedDistance, bool selected)
 {
-    return getColor(getDistanceToChar(charInfo));
+    if (selected)
+        return getColor(signedDistance, selectedTextInnerColor, selectedTextOuterColor);
+    else
+        return getColor(signedDistance, defaultTextInnerColor, defaultTextOuterColor);
 }
 
 vec4 getNumberText(vec4 numberCharInfo)
@@ -69,7 +78,7 @@ vec4 getNumberText(vec4 numberCharInfo)
             break;
         position -= vec2(size * 0.5, 0);
     }
-    return getColor(distance);
+    return getMenuTextColor(distance, false);
 }
 
 vec4 getMenuStartText()
@@ -107,7 +116,7 @@ vec4 getMenuStartText()
     float distance = 1;
     for (int i = 0; i < 19; ++i)
         distance = min(distance, getDistanceToChar(text[i]));
-    return getColor(distance);
+    return getMenuTextColor(distance, gCurrentMenuOption == 0);
 }
 
 vec4 getMenuExitText()
@@ -130,18 +139,16 @@ vec4 getMenuExitText()
     float distance = 1;
     for (int i = 0; i < 4; ++i)
         distance = min(distance, getDistanceToChar(text[i]));
-    return getColor(distance);
+    return getMenuTextColor(distance, gCurrentMenuOption == 1);
 }
 
 void main()
 {
     vec4 sceneColor = texture(sceneTexture, screenUV);
+    vec4 pointsColor = getNumberText(vec4(0.85, 0.8, 0.15, float(gPoints)));
     vec4 menuColor = blendOnto(getMenuStartText(), getMenuExitText());
-    vec4 testFontColor = blendOnto(
-        menuColor,
-        getNumberText(vec4(0.85, 0.8, 0.15, float(gPoints)))
-    );
+    vec4 guiColor = gCurrentMenuOption == -1 ? pointsColor : blendOnto(menuColor, pointsColor);
 
-    vec4 finalColor = blendOnto(sceneColor, testFontColor);
+    vec4 finalColor = blendOnto(sceneColor, guiColor);
     gl_FragColor = pow(finalColor, vec4(1.0/2.2)); // gamma corrected
 }

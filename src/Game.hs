@@ -11,7 +11,7 @@ import Data.Maybe (isJust)
 import GameState
 import Lens.Micro.Platform
 import Player (Player, PlayerInput(..))
-import Program (EventHandler, Event(..), SceneState(..), GUIState(..), Command(..))
+import Program (EventHandler, Event(..), SceneState(..), GUIState(..), Command(..), points)
 import qualified Graphics.UI.GLFW as GLFW
 
 type ProgramBuilder = GameState -> ([Command], GameState)
@@ -86,8 +86,7 @@ handleUpdateRenderStatesEvent state =
   let sceneState = SceneState { _camera = state ^. lastCameraPlacement,
                                 _player = state ^. lastPlayerPosition
                               }
-      guiState = GUIState { _points = getPoints state }
       commands = [ UpdateScene (const sceneState),
-                   UpdateGUI (const guiState)
+                   UpdateGUI $ \guiState -> guiState & points .~ (getPoints state)
                  ]
   in (commands, state)

@@ -1,11 +1,12 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Program where
 
 import Behaviour (Behaviour)
 import Common (Placement, Position, DeltaTime)
 import Graphics.UI.GLFW (Key, KeyState, ModifierKeys)
+import qualified Lens.Micro.Platform as Lens
 import Linear (zero, identity)
-
-type EventHandler = Behaviour Event [Command]
 
 -- events
 data Event = KeyEvent Key Int KeyState ModifierKeys
@@ -18,6 +19,7 @@ data SceneState = SceneState {
   _camera :: Placement,
   _player :: Position
 }
+Lens.makeLenses ''SceneState
 
 createSceneState = SceneState {
   _camera = (zero, identity),
@@ -26,14 +28,21 @@ createSceneState = SceneState {
 
 data GUIState = GUIState {
   --_mousePos :: (Double, Double), -- TODO: we don't really use this for anything ATM so we could remove it
-  _points :: Int
+  _points :: Int,
+  _currentMenuOption :: Maybe Int
 }
+Lens.makeLenses ''GUIState
 
 createGUIState = GUIState {
-  _points = 0
+  _points = 0,
+  _currentMenuOption = Nothing
 }
 
-data Command = MarkShadersAsDirty
+data Command = Terminate
+             | MarkShadersAsDirty
              | UpdateScene (SceneState -> SceneState)
              | UpdateGUI (GUIState -> GUIState)
              | Log String
+
+type EventHandler = Behaviour Event [Command]
+             

@@ -58,9 +58,6 @@ main = do
         eventQueue <- newTQueueIO
         programState <- createProgramState
         GLFW.setKeyCallback window (Just $ \window key scancode action mods -> do
-          let pressed = action /= GLFW.KeyState'Released
-          when pressed $ do
-            when (key == GLFW.Key'Escape) $ GLFW.setWindowShouldClose window True
           atomically $ writeTQueue eventQueue $ KeyEvent key scancode action mods
           )
         GLFW.setCursorPosCallback window (Just $ \win x y -> do
@@ -81,6 +78,7 @@ runLoop previousTime eventQueue eventHandler programState window = do
       let deltaTime = DeltaTime {getSeconds = realToFrac . max 0 . min 1 $ (time - previousTime)}
 
       let runCommand :: ProgramState -> Command -> IO ProgramState
+          runCommand programState@ProgramState{..} (Terminate         ) = GLFW.setWindowShouldClose window True *> pure programState
           runCommand programState@ProgramState{..} (MarkShadersAsDirty) = reloadShaders _glState *> pure programState
           runCommand programState@ProgramState{..} (UpdateScene f     ) = pure ProgramState {_sceneState = f _sceneState, _guiState = _guiState, _glState = _glState}
           runCommand programState@ProgramState{..} (UpdateGUI f       ) = pure ProgramState {_sceneState = _sceneState, _guiState = f _guiState, _glState = _glState}

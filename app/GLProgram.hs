@@ -11,6 +11,7 @@ import Common
 import Control.Exception (catch, ErrorCall)
 import Control.Monad (when, join)
 import Data.Foldable (toList)
+import Data.Maybe (fromMaybe)
 import Data.Vector.Generic (convert)
 import FontBuilder (Font, createGUIFont)
 import GHC.Exts (sortWith)
@@ -92,6 +93,7 @@ renderGUI time window guiState glState@GLState{..} = do
     glBindTexture GL_TEXTURE_2D (snd _font)
     setInt programId "fontTexture" Nothing 1
     setInt programId "gPoints" Nothing (fromIntegral . _points $ guiState)
+    setInt programId "gCurrentMenuOption" Nothing (fromIntegral . fromMaybe (-1) . _currentMenuOption $ guiState)
   pure glState
 
 withFullscreenGLSLProgram dummyVAO emptyBO targetBuffer (width, height) program setupAction = do
