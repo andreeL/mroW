@@ -81,10 +81,10 @@ runLoop previousTime eventQueue eventHandler programState window = do
       let deltaTime = DeltaTime {getSeconds = realToFrac . max 0 . min 1 $ (time - previousTime)}
 
       let runCommand :: ProgramState -> Command -> IO ProgramState
-          runCommand programState@ProgramState{..} (ReloadShaders) = reloadShaders _glState *> pure programState
-          runCommand programState@ProgramState{..} (UpdateScene f) = pure ProgramState {_sceneState = f _sceneState, _guiState = _guiState, _glState = _glState}
-          runCommand programState@ProgramState{..} (UpdateGUI f  ) = pure ProgramState {_sceneState = _sceneState, _guiState = f _guiState, _glState = _glState}
-          runCommand programState@ProgramState{..} (Log log      ) = putStrLn ("Log: " ++ log) *> pure programState
+          runCommand programState@ProgramState{..} (MarkShadersAsDirty) = reloadShaders _glState *> pure programState
+          runCommand programState@ProgramState{..} (UpdateScene f     ) = pure ProgramState {_sceneState = f _sceneState, _guiState = _guiState, _glState = _glState}
+          runCommand programState@ProgramState{..} (UpdateGUI f       ) = pure ProgramState {_sceneState = _sceneState, _guiState = f _guiState, _glState = _glState}
+          runCommand programState@ProgramState{..} (Log log           ) = putStrLn ("Log: " ++ log) *> pure programState
 
       let handleEvent :: Event -> (ProgramState, EventHandler) -> IO (ProgramState, EventHandler)
           handleEvent event (programState, eventHandler) = do

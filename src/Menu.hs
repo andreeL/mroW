@@ -49,7 +49,7 @@ handleKeyEvent :: GLFW.Key -> Int -> GLFW.KeyState -> GLFW.ModifierKeys -> Progr
 handleKeyEvent key scancode action mods menuState = fromMaybe ([], menuState) $ asum
   [ if action == GLFW.KeyState'Pressed then
       case key of
-        GLFW.Key'F1 -> Just ([ReloadShaders], menuState)
+        GLFW.Key'F1 -> Just ([MarkShadersAsDirty], menuState)
         GLFW.Key'Up -> let menuState' = moveMenuOption (-1) menuState in Just ([Log (show.fst._menu $ menuState')], menuState')
         GLFW.Key'Down -> let menuState' = moveMenuOption 1 menuState in Just ([Log (show.fst._menu $ menuState')], menuState')
         _ -> Nothing

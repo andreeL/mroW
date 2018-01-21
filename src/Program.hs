@@ -33,7 +33,7 @@ createGUIState = GUIState {
   _points = 0
 }
 
-data Command = ReloadShaders
+data Command = MarkShadersAsDirty
              | UpdateScene (SceneState -> SceneState)
              | UpdateGUI (GUIState -> GUIState)
              | Log String
