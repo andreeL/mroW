@@ -7,11 +7,11 @@ module Game (
 import Behaviour (Behaviour(..), bScanSplit)
 import Camera (Camera, CameraInput(..))
 import Common
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, fromMaybe)
 import GameState
 import Lens.Micro.Platform
 import Player (Player, PlayerInput(..))
-import Program (EventHandler, Event(..), SceneState(..), GUIState(..), Command(..), points)
+import Program (EventHandler, Event(..), SceneState(..), GUIState(..), Sound(..), Command(..), points)
 import qualified Graphics.UI.GLFW as GLFW
 
 type ProgramBuilder = GameState -> ([Command], GameState)
@@ -34,21 +34,21 @@ setOrRemove variableName variableValue doSet =
 handleKeyEvent :: GLFW.Key -> Int -> GLFW.KeyState -> GLFW.ModifierKeys -> ProgramBuilder
 handleKeyEvent key scancode action mods state =
   let keyDown = action /= GLFW.KeyState'Released
-      state' = case key of
-        GLFW.Key'W -> setOrRemove varActionUp "" keyDown state
-        GLFW.Key'A -> setOrRemove varActionLeft "" keyDown state
-        GLFW.Key'S -> setOrRemove varActionDown "" keyDown state
-        GLFW.Key'D -> setOrRemove varActionRight "" keyDown state
-        _ -> state
+      state' = fromMaybe state $ case key of
+        GLFW.Key'W -> Just $ setOrRemove varActionUp "" keyDown state
+        GLFW.Key'A -> Just $ setOrRemove varActionLeft "" keyDown state
+        GLFW.Key'S -> Just $ setOrRemove varActionDown "" keyDown state
+        GLFW.Key'D -> Just $ setOrRemove varActionRight "" keyDown state
+        _ -> Nothing
 
-      state'' = if action == GLFW.KeyState'Pressed then
+      (program, state'') = fromMaybe ([], state') $ if action == GLFW.KeyState'Pressed then
         case key of
-          GLFW.Key'F2 -> snd . useNextCameraMode $ state'
-          GLFW.Key'Space -> snd . addPoints 1 $ state'
-          _ -> state'
-        else state'
+          GLFW.Key'F2 -> Just ([], snd . useNextCameraMode $ state')
+          GLFW.Key'Space -> Just ([PlaySound $ Piano (getPoints state')], snd . addPoints 1 $ state')
+          _ -> Nothing
+        else Nothing
   
-  in ([], state'')
+  in (program, state'')
 
 handleMouseEvent :: (Double, Double) -> ProgramBuilder
 handleMouseEvent mousePos state = ([], snd . setMousePos mousePos $ state)

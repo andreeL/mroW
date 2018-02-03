@@ -38,10 +38,13 @@ createGUIState = GUIState {
   _currentMenuOption = Nothing
 }
 
+data Sound = Piano Int -- piano is just for testing
+
 data Command = Terminate
              | MarkShadersAsDirty
              | UpdateScene (SceneState -> SceneState)
              | UpdateGUI (GUIState -> GUIState)
+             | PlaySound Sound
              | Log String
 
 type EventHandler = Behaviour Event [Command]

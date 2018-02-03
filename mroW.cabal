@@ -47,6 +47,7 @@ executable mroW-exe
                      , containers
                      , GLFW-b
                      , linear
+                     , microlens-platform
                      , mroW
                      , OpenGLRaw
                      , sdl2

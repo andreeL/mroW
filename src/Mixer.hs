@@ -3,7 +3,12 @@
 {-# LANGUAGE BangPatterns #-}
 module Mixer
   ( startMixer
+  , SoundOutput(..)
+  , AddSoundWave
+  , StopMixer
+  , SoundWave
   , testMixer -- only for debuging
+  , pianoKey -- just for testing
   ) where
 
 import Control.Concurrent (threadDelay, forkIO)
@@ -94,7 +99,6 @@ startMixer noOfSamplesInSoundBuffer SoundOutput{..} = do
 
   let createNextChunk :: [PlayingSoundWave] -> IO SoundWave
       createNextChunk soundWaves = do
-        putStrLn $ "no of sounds = " ++ show (length soundWaves)
         pure $ VC.generate noOfElementsInSoundBuffer $ \j -> foldl' (\a PlayingSoundWave{..} -> a + (fromMaybe 0 (_soundWave VC.!? (_position + j)))) 0 soundWaves
 
   sharedSoundWaveQueue <- newMVar ([] :: [SoundWave])
@@ -126,12 +130,14 @@ startMixer noOfSamplesInSoundBuffer SoundOutput{..} = do
                     playingSoundWaves'
             mixerTick playingSoundWaves''
 
-  mainThreadId <- forkIO $ putStrLn "starting mixer" *> mixerTick []
+  putStrLn "starting mixer"
+  mainThreadId <- forkIO $ mixerTick []
   
   -- callbacks
   let addSoundWave wave = modifyMVar_ sharedSoundWaveQueue $ \xs -> pure (wave:xs)
   let stopMixer = do
-        putStrLn "stopping mixer" *> (modifyMVar_ sharedStopMixer $ pure . const True)
+        putStrLn "stopping mixer"
+        modifyMVar_ sharedStopMixer $ pure . const True
         takeMVar sharedMixerStopped
   
   pure (addSoundWave, stopMixer)
@@ -188,7 +194,8 @@ keyFrequency n = 2 ** ((fromIntegral n - 49) / 12) * 440
   c4, c'4, d4, d'4, e4, f4, f'4, g4, g'4, a4, a'4, b4,
   c5, c'5, d5, d'5, e5, f5, f'5, g5, g'5, a5, a'5, b5
   ] = fmap keyFrequency [16..16 + 4 * 12 - 1]
-p = generateADSREffect (SoundOutput speakerSampleRate speakersNoOfChannels) (ADSRParameters 0.025 0.05 0.75 0.2) 1 . sinWave 
+
+p = generateADSREffect (SoundOutput speakerSampleRate speakersNoOfChannels) (ADSRParameters 0.025 0.05 0.75 0.2) 1 . sinWave
 l x = generateADSREffect (SoundOutput speakerSampleRate speakersNoOfChannels) (ADSRParameters 0.025 0.05 0.75 x) 1 . triangleWave 
 
 songHallelujah = [
@@ -215,3 +222,5 @@ testMixer = do
   threadDelay 1000000
   stopMixer
   
+pianoKey :: SoundOutput -> Int -> SoundWave
+pianoKey soundOutput = generateADSREffect soundOutput (ADSRParameters 0.025 0.05 0.75 0.2) 1 . sinWave . keyFrequency
