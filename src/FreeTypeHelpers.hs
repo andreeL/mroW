@@ -24,6 +24,7 @@ import Graphics.Rendering.FreeType.Internal.Library
 import Graphics.Rendering.FreeType.Internal.GlyphSlot
 import Graphics.Rendering.FreeType.Internal.PrimitiveTypes
 --import Graphics.Rendering.FreeType.Internal.Vector
+import Logger (Logger)
 
 data FTGlyph = FTGlyph {
   _size :: (Int, Int),
@@ -34,8 +35,8 @@ data FTGlyph = FTGlyph {
 
 fallbackFont = "fonts/GibFontPlox.otf" :: String
 
-showFailmessage :: String -> FT_Error -> IO ()
-showFailmessage operation error = putStrLn $ operation ++ " failed: " ++ show error
+showFailmessage :: Logger -> String -> FT_Error -> IO ()
+showFailmessage logger operation error = logger $ operation ++ " failed: " ++ show error
 
 runFtOperation :: IO FT_Error -> IO FT_Error
 runFtOperation action = do
@@ -88,13 +89,16 @@ extractFTGlyph ftGlyphSlot = do
   _image <- generateM (uncurry (*) _size) (fmap fromIntegral . peekElemOff buffer)
   pure FTGlyph{..}
 
-createGlyphs :: Maybe String -> (Maybe Int, Int) -> [Char] -> IO [(Char, FTGlyph)]
-createGlyphs maybeFontPath (maybePixelWith, pixelHeight) chars = do
-  flip withFreeType (fmap (const []) . showFailmessage "init freetype")  $ \ftLib -> do
-    flip (withNewFace ftLib (fromMaybe fallbackFont maybeFontPath) 0) (fmap (const []) . showFailmessage "load font") $ \ftFace -> do
+createGlyphs :: Logger -> Maybe String -> (Maybe Int, Int) -> [Char] -> IO [(Char, FTGlyph)]
+createGlyphs logger maybeFontPath (maybePixelWith, pixelHeight) chars = do
+  flip withFreeType (fmap (const []) . showFailmessage logger "init freetype")  $ \ftLib -> do
+    flip (withNewFace ftLib (fromMaybe fallbackFont maybeFontPath) 0) (fmap (const []) . showFailmessage logger "load font") $ \ftFace -> do
       let pixelWith = fromMaybe 0 maybePixelWith
       runFtOperation $ ft_Set_Pixel_Sizes ftFace (fromIntegral pixelWith) (fromIntegral pixelHeight)
       forM chars $ \char -> withGlyphSlot (fmap ((,) char) . extractFTGlyph) ftFace char
+
+
+
 
 -- debug stuff
 showGlyphInfo :: (Char, FT_GlyphSlot) -> IO()
@@ -153,7 +157,7 @@ showGlyphInfo (character, ftGlyphSlot) = do
 
 showGlyphInfos :: Maybe String -> Int -> [Char] -> IO()
 showGlyphInfos maybeFontPath charSize chars =
-  flip withFreeType (showFailmessage "init freetype") $ \ftLib -> do
-    flip (withNewFace ftLib (fromMaybe fallbackFont maybeFontPath) 0) (showFailmessage "load font") $ \ftFace -> do
+  flip withFreeType (showFailmessage putStrLn "init freetype") $ \ftLib -> do
+    flip (withNewFace ftLib (fromMaybe fallbackFont maybeFontPath) 0) (showFailmessage putStrLn "load font") $ \ftFace -> do
       runFtOperation $ ft_Set_Pixel_Sizes ftFace 0 (fromIntegral charSize)
       forM_ chars $ \char -> withGlyphSlot (showGlyphInfo . ((,) char)) ftFace char

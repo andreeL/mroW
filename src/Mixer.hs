@@ -18,6 +18,7 @@ import Data.Foldable (foldl')
 import Data.Maybe (fromMaybe, mapMaybe)
 import qualified Data.Vector.Storable as VC
 import qualified Data.Vector.Storable.Mutable as VM
+import Logger (Logger)
 import qualified SDL.Init (initialize, InitFlag(..), quit)
 import SDL.Audio (openAudioDevice, setAudioDeviceLocked, setAudioDevicePlaybackState, closeAudioDevice)
 import SDL.Audio (OpenDeviceSpec(..), AudioFormat(..), Changeable(..), Channels(..), AudioDeviceUsage(..), PlaybackState(..), LockState(..))
@@ -64,8 +65,8 @@ data PlayingSoundWave = PlayingSoundWave {
 type AddSoundWave = SoundWave -> IO ()
 type StopMixer = IO ()
 
-startMixer :: Int -> SoundOutput -> IO (AddSoundWave, StopMixer)
-startMixer noOfSamplesInSoundBuffer SoundOutput{..} = do
+startMixer :: Logger -> Int -> SoundOutput -> IO (AddSoundWave, StopMixer)
+startMixer logger noOfSamplesInSoundBuffer SoundOutput{..} = do
   ringBuffer <- createRingBuffer
 
   let noOfElementsInSoundBuffer = noOfSamplesInSoundBuffer * _noOfChannels
@@ -111,8 +112,6 @@ startMixer noOfSamplesInSoundBuffer SoundOutput{..} = do
         stopMixer <- readMVar sharedStopMixer
         if stopMixer
           then do
-            closeAudioDevice audioDevice
-            SDL.Init.quit
             putMVar sharedMixerStopped ()
           else do
             threadDelay 10000
@@ -130,16 +129,18 @@ startMixer noOfSamplesInSoundBuffer SoundOutput{..} = do
                     playingSoundWaves'
             mixerTick playingSoundWaves''
 
-  putStrLn "starting mixer"
-  mainThreadId <- forkIO $ mixerTick []
+  logger "starting mixer"
+  mainThreadId <- forkIO $ do
+    mixerTick []
   
-  -- callbacks
+  -- -- callbacks
   let addSoundWave wave = modifyMVar_ sharedSoundWaveQueue $ \xs -> pure (wave:xs)
   let stopMixer = do
-        putStrLn "stopping mixer"
+        logger "stopping mixer"
         modifyMVar_ sharedStopMixer $ pure . const True
         takeMVar sharedMixerStopped
-  
+        closeAudioDevice audioDevice
+        SDL.Init.quit
   pure (addSoundWave, stopMixer)
 
 
@@ -212,7 +213,7 @@ songHallelujah = [
 
 testMixer :: IO ()
 testMixer = do
-  (addSoundWave, stopMixer) <- startMixer 2048 SoundOutput{
+  (addSoundWave, stopMixer) <- startMixer putStrLn 2048 SoundOutput{
     _sampleRate = speakerSampleRate,
     _noOfChannels = speakersNoOfChannels    
   }

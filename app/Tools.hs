@@ -11,7 +11,7 @@ data Align = AlignLeft | AlignCenter
 -- This is just some quick and dirty hack to help getting a prototype menu up and running fast! if it's performant enough I just might end up sticking with it... =)
 
 getGUIFont :: IO Font
-getGUIFont = fst <$> createGUIFont
+getGUIFont = fst <$> createGUIFont putStrLn
 
 generateGLSLCodeFromText :: Align -> Font -> String -> String
 generateGLSLCodeFromText align font text =

@@ -20,6 +20,7 @@ import Data.Vector.Unboxed as VConst (Vector, (!), fromList, zipWith, unsafeFree
 import Data.Vector.Unboxed.Mutable as VMutable (MVector, read, write, replicate)
 import Data.Word (Word8)
 import qualified FreeTypeHelpers as FTH (FTGlyph(..), createGlyphs)
+import Logger (Logger)
 import Text.Read (readMaybe)
 import System.IO.Error (isDoesNotExistError)
 
@@ -48,17 +49,17 @@ getLength = sqrt . fromIntegral . getSquareLength
 -- maybe I'll make it more robust in the future, and add some extra boundary checks or something
 -- However since no unsafe read/writes are made we should be pretty ok!
 
-createGUIFont :: IO FontAndTexture
-createGUIFont = do
+createGUIFont :: Logger -> IO FontAndTexture
+createGUIFont logger = do
   let fontCacheFilepath = "guiFont.tmp"
   cachedFont <- readFromFile fontCacheFilepath
   case cachedFont of
-    Just font -> putStrLn "Using cached font!" *> pure font
+    Just font -> logger "Using cached font" *> pure font
     Nothing -> do
       let ascii = ['\0'..'\127'] -- we only care for the basic character set for now
-      putStrLn "Generating font, this might take several minutes... (do NOT do this in GHCi, it can crash)"
+      logger "Generating font, this might take several minutes... (do NOT do this in GHCi, it can crash)"
       -- TODO: WARNING, GHCi crashes when trying to build fonts this highres... this is probably a good place to start optimizing :P
-      font <- createFont Nothing 26 3 16 ascii
+      font <- createFont logger Nothing 26 3 16 ascii
       writeToFile fontCacheFilepath font
       pure font
 
@@ -68,23 +69,10 @@ readFromFile filepath = either (const Nothing) readMaybe <$> tryJust (guard . is
 writeToFile :: Show a => String -> a -> IO ()
 writeToFile filepath = writeFile filepath . show
 
-createFont :: Maybe String -> Int -> Int -> Int -> [Char] -> IO FontAndTexture
-createFont maybeFontPath glyphHeight borderSize scaleDown chars = do
-  ftGlyphs <- FTH.createGlyphs maybeFontPath (Nothing, (glyphHeight * scaleDown)) chars
+createFont :: Logger -> Maybe String -> Int -> Int -> Int -> [Char] -> IO FontAndTexture
+createFont logger maybeFontPath glyphHeight borderSize scaleDown chars = do
+  ftGlyphs <- FTH.createGlyphs logger maybeFontPath (Nothing, (glyphHeight * scaleDown)) chars
   pure $ buildFontFromFtGlyphs glyphHeight borderSize scaleDown ftGlyphs
-
-showFont :: FontAndTexture -> IO ()
-showFont (font, ((textureWidth, textureHeight), textureData)) = do
-  forM_ (reverse [0..textureHeight - 1]) $ \y -> do
-    forM_ [0..textureWidth - 1] $ \x -> do
-      let index = fromIntegral $ x + y * textureWidth
-          intensity = (fromIntegral $ textureData ! index) * 15 / 255
-          character = if intensity == 0 then ' ' else intToDigit (ceiling  intensity)
-      putChar $ character
-      putChar $ character
-    putStrLn ""
-
-  putStrLn $ show font
 
 buildFontFromFtGlyphs :: Int -> Int -> Int -> [(Char, FTH.FTGlyph)] -> FontAndTexture
 buildFontFromFtGlyphs requestedGlyphHeight borderSize scaleDown ftGlyphs = do
@@ -210,3 +198,20 @@ run8SSEDT ((width, height), df) = do
   forM_ yBackward $ \y -> do
     forM_ xBackward $ \x -> pickBest x y mask3
     forM_ xForward $ \x -> pickBest x y mask4
+
+
+
+
+-- debug stuff
+showFont :: FontAndTexture -> IO ()
+showFont (font, ((textureWidth, textureHeight), textureData)) = do
+  forM_ (reverse [0..textureHeight - 1]) $ \y -> do
+    forM_ [0..textureWidth - 1] $ \x -> do
+      let index = fromIntegral $ x + y * textureWidth
+          intensity = (fromIntegral $ textureData ! index) * 15 / 255
+          character = if intensity == 0 then ' ' else intToDigit (ceiling  intensity)
+      putChar $ character
+      putChar $ character
+    putStrLn ""
+
+  putStrLn $ show font

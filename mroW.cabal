@@ -24,6 +24,7 @@ library
                      , FreeTypeHelpers
                      , Game
                      , GameState
+                     , Logger
                      , Menu
                      , Mixer
                      , Player

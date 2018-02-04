@@ -28,7 +28,7 @@ import Data.Vector.Storable (Vector, unsafeWith)
 import Foreign
 import Foreign.C.String
 import Graphics.GL
-import System.IO (hFlush, stdout)
+import Logger (Logger)
 
 data GLSLProgram = GLSLProgram {
     vertexShaderId :: GLuint,
@@ -36,9 +36,9 @@ data GLSLProgram = GLSLProgram {
     programId :: GLuint
     }
 
-#define CHECK_GL (checkForGlError __FILE__ __LINE__) $
-checkForGlError :: String -> Int -> IO a -> IO a
-checkForGlError file line action = do
+#define CHECK_GL (checkForGlError logger __FILE__ __LINE__) $
+checkForGlError :: Logger -> String -> Int -> IO a -> IO a
+checkForGlError logger file line action = do
     check "before"
     result <- action
     check "after"
@@ -46,24 +46,24 @@ checkForGlError file line action = do
     where
         check placement = do
             glError' <- glGetError
-            when (glError' /= 0) $ logString "OpenGL" (Just $ "Error " ++ show glError' ++ " " ++ placement ++ " @" ++ file ++ ":" ++ show line)
+            when (glError' /= 0) $ logString logger "OpenGL" (Just $ "Error " ++ show glError' ++ " " ++ placement ++ " @" ++ file ++ ":" ++ show line)
 
-createGLSLProgram :: (FilePath, FilePath) -> IO (GLSLProgram)
-createGLSLProgram (vertexShaderSource, fragmentShaderSource) = do
+createGLSLProgram :: Logger -> (FilePath, FilePath) -> IO (GLSLProgram)
+createGLSLProgram logger (vertexShaderSource, fragmentShaderSource) = do
     vertexShaderId <- CHECK_GL glCreateShader GL_VERTEX_SHADER
     fragmentShaderId <- CHECK_GL glCreateShader GL_FRAGMENT_SHADER
     programId <- CHECK_GL glCreateProgram
     CHECK_GL (forM_ [vertexShaderId, fragmentShaderId] $ glAttachShader programId)
-    buildShader vertexShaderId vertexShaderSource
-    buildShader fragmentShaderId fragmentShaderSource
-    linkProgram programId
+    buildShader logger vertexShaderId vertexShaderSource
+    buildShader logger fragmentShaderId fragmentShaderSource
+    linkProgram logger programId
     return GLSLProgram{..}
 
-recreateGLSLProgram :: GLSLProgram -> (FilePath, FilePath) -> IO ()
-recreateGLSLProgram GLSLProgram{..} (vertexShaderSource, fragmentShaderSource) = do
-    buildShader vertexShaderId vertexShaderSource
-    buildShader fragmentShaderId fragmentShaderSource
-    linkProgram programId
+recreateGLSLProgram :: Logger -> GLSLProgram -> (FilePath, FilePath) -> IO ()
+recreateGLSLProgram logger GLSLProgram{..} (vertexShaderSource, fragmentShaderSource) = do
+    buildShader logger vertexShaderId vertexShaderSource
+    buildShader logger fragmentShaderId fragmentShaderSource
+    linkProgram logger programId
 
 getProgramId :: GLSLProgram -> GLuint
 getProgramId = programId
@@ -74,8 +74,8 @@ deleteGLSLProgram GLSLProgram{..} = do
     glDeleteShader fragmentShaderId
     glDeleteProgram programId
 
-createEmptyBO :: GLsizei -> IO GLuint
-createEmptyBO noOfBytes = do
+createEmptyBO :: Logger -> GLsizei -> IO GLuint
+createEmptyBO logger noOfBytes = do
     bufferId <- alloca $ \ptr -> glGenBuffers 1 ptr >> peek ptr
     glBindBuffer GL_ARRAY_BUFFER bufferId
     CHECK_GL glBufferData GL_ARRAY_BUFFER (fromIntegral noOfBytes) nullPtr GL_STATIC_DRAW
@@ -88,44 +88,44 @@ createVAO = do
     glBindVertexArray id
     return id
 
-withUniformLocation :: GLuint -> String -> Maybe GLint -> (GLint -> IO()) -> IO (GLint)
-withUniformLocation oId name mLoc action = do
+withUniformLocation :: Logger -> GLuint -> String -> Maybe GLint -> (GLint -> IO()) -> IO (GLint)
+withUniformLocation logger oId name mLoc action = do
     loc <- case mLoc of
         Just cachedLoc -> return cachedLoc
         Nothing        -> CHECK_GL withCString name $ glGetUniformLocation oId
     action loc
     return loc
 
-setInt :: GLuint -> String -> Maybe GLint -> GLint -> IO (GLint)
-setInt oId name mLoc x = withUniformLocation oId name mLoc (\loc -> glUniform1i loc x)
+setInt :: Logger -> GLuint -> String -> Maybe GLint -> GLint -> IO (GLint)
+setInt logger oId name mLoc x = withUniformLocation logger oId name mLoc (\loc -> glUniform1i loc x)
 
-setFloat :: GLuint -> String -> Maybe GLint -> GLfloat -> IO (GLint)
-setFloat oId name mLoc x = withUniformLocation oId name mLoc (\loc -> glUniform1f loc x)
+setFloat :: Logger -> GLuint -> String -> Maybe GLint -> GLfloat -> IO (GLint)
+setFloat logger oId name mLoc x = withUniformLocation logger oId name mLoc (\loc -> glUniform1f loc x)
 
-setFloat2 :: GLuint -> String -> Maybe GLint -> GLfloat -> GLfloat -> IO (GLint)
-setFloat2 oId name mLoc x y = withUniformLocation oId name mLoc (\loc -> glUniform2f loc x y)
+setFloat2 :: Logger -> GLuint -> String -> Maybe GLint -> GLfloat -> GLfloat -> IO (GLint)
+setFloat2 logger oId name mLoc x y = withUniformLocation logger oId name mLoc (\loc -> glUniform2f loc x y)
 
-setFloat3 :: GLuint -> String -> Maybe GLint -> GLfloat -> GLfloat -> GLfloat -> IO (GLint)
-setFloat3 oId name mLoc x y z = withUniformLocation oId name mLoc (\loc -> glUniform3f loc x y z)
+setFloat3 :: Logger -> GLuint -> String -> Maybe GLint -> GLfloat -> GLfloat -> GLfloat -> IO (GLint)
+setFloat3 logger oId name mLoc x y z = withUniformLocation logger oId name mLoc (\loc -> glUniform3f loc x y z)
 
-setFloat4Array :: GLuint -> String -> Maybe GLint -> [GLfloat] -> IO (GLint)
-setFloat4Array oId name mLoc array = do
-    withUniformLocation oId name mLoc $ \loc -> do
+setFloat4Array :: Logger -> GLuint -> String -> Maybe GLint -> [GLfloat] -> IO (GLint)
+setFloat4Array logger oId name mLoc array = do
+    withUniformLocation logger oId name mLoc $ \loc -> do
         withArrayLen array $ \len arrayPtr -> do
             if (len `mod` 4 == 0)
                 then glUniform4fv loc (fromIntegral $ len `div` 4) arrayPtr
-                else logString "called setFloat4Array with wrong length" (Just len)
+                else logString logger "called setFloat4Array with wrong length" (Just len)
                 
-setMatrix33 :: GLuint -> String -> Maybe GLint -> [GLfloat] -> IO (GLint)
-setMatrix33 oId name mLoc matrix = do
-    withUniformLocation oId name mLoc $ \loc -> do
+setMatrix33 :: Logger -> GLuint -> String -> Maybe GLint -> [GLfloat] -> IO (GLint)
+setMatrix33 logger oId name mLoc matrix = do
+    withUniformLocation logger oId name mLoc $ \loc -> do
         withArrayLen matrix $ \len matrixPtr -> do
             if len == 9
                 then glUniformMatrix3fv loc 1 GL_FALSE matrixPtr
-                else logString "called setMatrix33 with wrong length" (Just len)
+                else logString logger "called setMatrix33 with wrong length" (Just len)
 
-createSceneTargetTexture :: GLsizei -> GLsizei -> IO (GLuint)
-createSceneTargetTexture width height = do
+createSceneTargetTexture :: Logger -> GLsizei -> GLsizei -> IO (GLuint)
+createSceneTargetTexture logger width height = do
     glActiveTexture GL_TEXTURE0
     textureId <- alloca $ \ptr -> glGenVertexArrays 1 ptr >> peek ptr
     glBindTexture GL_TEXTURE_2D textureId
@@ -148,8 +148,8 @@ createSceneTargetBuffer textureId = do
     glBindFramebuffer GL_FRAMEBUFFER 0
     return frameBufferId
 
-createFontTexture :: GLsizei -> GLsizei -> Vector Word8 -> IO (GLuint)
-createFontTexture width height textureData = do
+createFontTexture :: Logger -> GLsizei -> GLsizei -> Vector Word8 -> IO (GLuint)
+createFontTexture logger width height textureData = do
     glActiveTexture GL_TEXTURE0
     textureId <- alloca $ \ptr -> glGenVertexArrays 1 ptr >> peek ptr
     glBindTexture GL_TEXTURE_2D textureId
@@ -164,15 +164,14 @@ createFontTexture width height textureData = do
     return textureId
 
 -- private stuff
-logString :: (Show b) => String -> Maybe b -> IO () 
-logString info Nothing = logString' $ info
-logString info (Just var) = logString' $ info ++ " - " ++ show var
-logString' info = do
-    putStrLn info
-    hFlush stdout -- TODO!!! just log to error??
+logString :: (Show b) => Logger -> String -> Maybe b -> IO () 
+logString logger info Nothing = logString' logger info
+logString logger info (Just var) = logString' logger $ info ++ " - " ++ show var
+logString' logger info = do
+    logger info
 
-buildShader :: GLuint -> FilePath -> IO ()
-buildShader shaderId filename = do
+buildShader :: Logger -> GLuint -> FilePath -> IO ()
+buildShader logger shaderId filename = do
     sourceCode <- readFile filename
     withCString sourceCode $ \source -> do
         alloca $ \shaderOk -> do
@@ -192,11 +191,11 @@ buildShader shaderId filename = do
                         logMessagePointer <- mallocArray (fromIntegral logLength) :: IO (Ptr GLchar)
                         CHECK_GL glGetShaderInfoLog shaderId logLength nullPtr logMessagePointer
                         logMessage <- peekCString logMessagePointer
-                        logString' $ filename ++ " - " ++ logMessage
+                        logString' logger $ filename ++ " - " ++ logMessage
                         error $ "Failed to compile shader " ++ filename ++ "\n"
 
-linkProgram :: GLuint -> IO ()
-linkProgram programId = do
+linkProgram :: Logger -> GLuint -> IO ()
+linkProgram logger programId = do
     alloca $ \programOk -> do
         CHECK_GL glLinkProgram programId
         CHECK_GL glGetProgramiv programId GL_LINK_STATUS programOk
@@ -208,5 +207,5 @@ linkProgram programId = do
             logMessagePointer <- mallocArray (fromIntegral logLength) :: IO (Ptr GLchar)
             CHECK_GL glGetProgramInfoLog programId logLength nullPtr logMessagePointer
             logMessage <- peekCString logMessagePointer
-            logString' $ "linking - " ++ logMessage
+            logString' logger $ "linking - " ++ logMessage
             error $ "Failed to link program\n"

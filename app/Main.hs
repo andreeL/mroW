@@ -8,6 +8,7 @@ import Control.Concurrent.STM
 import Control.Monad
 import Data.Maybe (fromMaybe)
 import Lens.Micro.Platform
+import Logger (Logger, Channel(..), withLogger)
 import Menu (createMenu, createMenuState)
 import Mixer (startMixer, SoundOutput(..), AddSoundWave, StopMixer, pianoKey)
 import GLProgram (GLState, createGLState, reloadShaders, render)
@@ -17,15 +18,15 @@ import Program (EventHandler, Event(..), SceneState, createSceneState, GUIState,
 defaultWindowSize = (960, 540) :: (Int, Int)
 --defaultWindowSize = (1728, 972) :: (Int, Int)
 
-errorCallback :: GLFW.ErrorCallback
-errorCallback error description = do
+errorCallback :: Logger -> GLFW.ErrorCallback
+errorCallback logger error description = do
   -- TODO!!! just log to error??
-  putStrLn $ "Error: " ++ show error
-  putStrLn description
+  logger $ "Error: " ++ show error
+  logger description
 
-withGLFW :: IO () -> IO ()
-withGLFW program = do
-  GLFW.setErrorCallback (Just errorCallback)
+withGLFW :: Logger -> IO () -> IO ()
+withGLFW logger program = do
+  GLFW.setErrorCallback (Just $ errorCallback logger)
   initSuccessful <- GLFW.init
   when initSuccessful $ do
     program
@@ -34,6 +35,7 @@ withGLFW program = do
 type EventQueue = Control.Concurrent.STM.TQueue Event
 
 data ProgramSettings = ProgramSettings{
+  _settingLoggerChannels :: [Channel],
   _settingNoOfSamplesInSoundBuffer :: Int,
   _settingSoundOutput :: SoundOutput
 }
@@ -49,10 +51,10 @@ data ProgramState = ProgramState {
 
 makeLenses ''ProgramState
 
-createProgramState :: ProgramSettings -> IO ProgramState
-createProgramState ProgramSettings{..} = do
-  (_addSoundWave, _stopMixer) <- startMixer _settingNoOfSamplesInSoundBuffer _settingSoundOutput
-  glState <- createGLState defaultWindowSize
+createProgramState :: Logger -> ProgramSettings -> IO ProgramState
+createProgramState logger ProgramSettings{..} = do
+  (_addSoundWave, _stopMixer) <- startMixer logger _settingNoOfSamplesInSoundBuffer _settingSoundOutput
+  glState <- createGLState logger defaultWindowSize
   pure ProgramState{
     _soundOutput = _settingSoundOutput,
     _addSoundWave = _addSoundWave,
@@ -70,6 +72,7 @@ destroyProgramState ProgramState{..} = do
 
 main :: IO ()
 main = runProgram ProgramSettings {
+  _settingLoggerChannels = [File "log.tmp"],
   _settingNoOfSamplesInSoundBuffer = 2048,
   _settingSoundOutput = SoundOutput {
     _sampleRate = 48000,
@@ -80,6 +83,7 @@ main = runProgram ProgramSettings {
 -- ghciMain can run with lower settings to decrease the startup time, and to reduce lagg
 ghciMain :: IO ()
 ghciMain = runProgram ProgramSettings {
+  _settingLoggerChannels = [Console],
   _settingNoOfSamplesInSoundBuffer = 4096,
   _settingSoundOutput = SoundOutput {
     _sampleRate = 22500,
@@ -89,29 +93,30 @@ ghciMain = runProgram ProgramSettings {
   
 runProgram :: ProgramSettings -> IO ()
 runProgram programSettings = do
-  withGLFW $ do
-    maybeWindow <- GLFW.createWindow (fromIntegral.fst $ defaultWindowSize) (fromIntegral.snd $ defaultWindowSize) "mroW" Nothing Nothing
-    case maybeWindow of
-      Nothing -> return ()
-      Just window -> do
-        GLFW.makeContextCurrent (Just window)
-        GLFW.swapInterval 1 -- assuming this enables vsync (doesn't work on my machine)
-        eventQueue <- newTQueueIO
-        
-        programState <- createProgramState programSettings
-        GLFW.setKeyCallback window (Just $ \window key scancode action mods -> do
-          atomically $ writeTQueue eventQueue $ KeyEvent key scancode action mods
-          )
-        GLFW.setCursorPosCallback window (Just $ \win x y -> do
-          atomically $ writeTQueue eventQueue $ MouseEvent x y
-          )
-        time <- fmap (fromMaybe 0) GLFW.getTime
-        programState' <- runLoop time eventQueue (createMenu createMenuState) programState window
-        destroyProgramState programState'
-        GLFW.destroyWindow window
+  withLogger (_settingLoggerChannels programSettings) $ \logger -> do
+    withGLFW logger $ do
+      maybeWindow <- GLFW.createWindow (fromIntegral.fst $ defaultWindowSize) (fromIntegral.snd $ defaultWindowSize) "mroW" Nothing Nothing
+      case maybeWindow of
+        Nothing -> return ()
+        Just window -> do
+          GLFW.makeContextCurrent (Just window)
+          GLFW.swapInterval 1 -- assuming this enables vsync (doesn't work on my machine)
+          eventQueue <- newTQueueIO
+          
+          programState <- createProgramState logger programSettings
+          GLFW.setKeyCallback window (Just $ \window key scancode action mods -> do
+            atomically $ writeTQueue eventQueue $ KeyEvent key scancode action mods
+            )
+          GLFW.setCursorPosCallback window (Just $ \win x y -> do
+            atomically $ writeTQueue eventQueue $ MouseEvent x y
+            )
+          time <- fmap (fromMaybe 0) GLFW.getTime
+          programState' <- runLoop logger time eventQueue (createMenu createMenuState) programState window
+          destroyProgramState programState'
+          GLFW.destroyWindow window
 
-runLoop :: Double -> EventQueue -> EventHandler -> ProgramState -> GLFW.Window -> IO ProgramState
-runLoop previousTime eventQueue eventHandler programState window = do
+runLoop :: Logger -> Double -> EventQueue -> EventHandler -> ProgramState -> GLFW.Window -> IO ProgramState
+runLoop logger previousTime eventQueue eventHandler programState window = do
   GLFW.pollEvents
   windowShouldClose <- GLFW.windowShouldClose window
   case windowShouldClose of
@@ -122,11 +127,11 @@ runLoop previousTime eventQueue eventHandler programState window = do
 
       let runCommand :: ProgramState -> Command -> IO ProgramState
           runCommand programState@ProgramState{..} (Terminate         ) = GLFW.setWindowShouldClose window True *> pure programState
-          runCommand programState@ProgramState{..} (MarkShadersAsDirty) = reloadShaders _glState *> pure programState
+          runCommand programState@ProgramState{..} (MarkShadersAsDirty) = reloadShaders logger _glState *> pure programState
           runCommand programState@ProgramState{..} (UpdateScene f     ) = pure $ programState & sceneState %~ f
           runCommand programState@ProgramState{..} (UpdateGUI f       ) = pure $ programState & guiState %~ f
           runCommand programState@ProgramState{..} (PlaySound sound   ) = playSound _soundOutput _addSoundWave sound *> pure programState
-          runCommand programState@ProgramState{..} (Log log           ) = putStrLn ("Log: " ++ log) *> pure programState
+          runCommand programState@ProgramState{..} (Log log           ) = logger log *> pure programState
 
       let handleEvent :: Event -> (ProgramState, EventHandler) -> IO (ProgramState, EventHandler)
           handleEvent event (programState, eventHandler) = do
@@ -150,8 +155,8 @@ runLoop previousTime eventQueue eventHandler programState window = do
         handleEvent (TickEvent time deltaTime) >>=
         handleEvent UpdateRenderStates
 
-      glState' <- render time window (programState' ^. sceneState) (programState' ^. guiState) (programState' ^. glState)
-      runLoop time eventQueue eventHandler' (programState' & glState .~ glState') window
+      glState' <- render logger time window (programState' ^. sceneState) (programState' ^. guiState) (programState' ^. glState)
+      runLoop logger time eventQueue eventHandler' (programState' & glState .~ glState') window
 
 playSound :: SoundOutput -> AddSoundWave -> Sound -> IO()
 playSound soundOuput addSoundWave sound =
