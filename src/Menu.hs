@@ -14,6 +14,7 @@ import Game (createGame)
 import GameState (createGameState)
 import Lens.Micro.Platform
 import Program (EventHandler, Event(..), GUIState(..), Command(..), currentMenuOption)
+import System.Random (mkStdGen)
 import qualified Graphics.UI.GLFW as GLFW
 
 data MenuOption = StartGame
@@ -97,7 +98,7 @@ moveMenuOption steps MenuState{..} = MenuState{
 
 startGame :: MenuState -> MenuState
 startGame MenuState{..} = MenuState{
-    _game = Just . fromMaybe (createGame createGameState) $ _game,
+    _game = Just . fromMaybe (createGame $ createGameState $ mkStdGen 0) $ _game, -- TODO we need different seeds
     _menu = Nothing
   }
 

@@ -8,13 +8,18 @@ import Behaviour (Behaviour(..), bScanSplit)
 import Camera (Camera, CameraInput(..))
 import Common
 import Data.Maybe (isJust, fromMaybe)
+import Data.List (partition)
 import GameState
-import Lens.Micro.Platform
-import Player (Player, PlayerInput(..))
-import Program (EventHandler, Event(..), SceneState(..), GUIState(..), Sound(..), Command(..), points)
 import qualified Graphics.UI.GLFW as GLFW
+import Lens.Micro.Platform
+import Linear (V3(..), distance)
+import Player (Player, PlayerInput(..))
+import Program (EventHandler, Event(..), SceneObject(..), SceneState(..), GUIState(..), Sound(..), Command(..), points)
+import System.Random (StdGen, randomR)
 
 type ProgramBuilder = GameState -> ([Command], GameState)
+
+flySpeed = 3 :: Float
 
 createGame :: GameState -> EventHandler
 createGame = bScanSplit (flip handleEvent)
@@ -78,15 +83,43 @@ handleTickEvent time deltaTime state = let
   }
   _variables = state ^. variables
   (_lastCameraPlacement, _camera) = getBehaviour (state ^. camera) cameraInput
-
-  in ([], GameState{..})
+  (updatedGameObjects, _randomGen) = updateGameObjects (getSeconds deltaTime) (state ^. gameObjects) (state ^. randomGen)
+  (_gameObjects, points) = tryTakeGameObjects _lastPlayerPosition updatedGameObjects
+  newGameState = snd . addPoints points $ GameState{..}
+  in (if (points > 0) then [PlaySound $ Piano (getPoints newGameState)] else [], newGameState)
 
 handleUpdateRenderStatesEvent :: ProgramBuilder
 handleUpdateRenderStatesEvent state =
   let sceneState = SceneState { _camera = state ^. lastCameraPlacement,
-                                _player = state ^. lastPlayerPosition
+                                _player = state ^. lastPlayerPosition,
+                                _objects = fmap toSceneObject $ state ^. gameObjects
                               }
       commands = [ UpdateScene (const sceneState),
                    UpdateGUI $ \guiState -> guiState & points .~ (getPoints state)
                  ]
   in (commands, state)
+
+toSceneObject :: GameObject -> SceneObject
+toSceneObject (position, Cat skin) = SceneObject {
+  _objectPosition = position,
+  _objectType = skin
+}
+
+updateGameObjects :: Float -> [GameObject] -> StdGen -> ([GameObject], StdGen)
+updateGameObjects time gameObjects randomGen =
+  let moveForward (V3 x y z, model) = (V3 x y (z + time * flySpeed), model)
+      movedObjects = filter (\(V3 _ _ z, _) -> z < 20) . fmap moveForward $ gameObjects
+      (addedObjects, randomGen') =
+        let minZ = -5
+            minDistance = 4
+            (x, randomGen') = randomR (-1, 1) randomGen
+            (y, randomGen'') = randomR (-1, 1) randomGen'
+            (z, randomGen''') = randomR (minZ - minDistance - 10, minZ - minDistance) randomGen''
+            newObjectNeeded [] = True
+            newObjectNeeded xs = (>minZ) . minimum . fmap (\(V3 _ _ z, _) -> z) $ xs
+        in if newObjectNeeded movedObjects then ([(V3 x y z, Cat 1)], randomGen''') else ([], randomGen)
+   in (addedObjects ++ movedObjects, randomGen')
+
+tryTakeGameObjects :: Position -> [GameObject] -> ([GameObject], Int)
+tryTakeGameObjects playerPosition gGameObjects = (objectsMissed, length objectsTaken)
+  where (objectsMissed, objectsTaken) = partition (\(objectPosition, _) -> (playerPosition `distance` objectPosition) > 0.25) gGameObjects

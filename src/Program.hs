@@ -6,7 +6,7 @@ import Behaviour (Behaviour)
 import Common (Placement, Position, DeltaTime)
 import Graphics.UI.GLFW (Key, KeyState, ModifierKeys)
 import qualified Lens.Micro.Platform as Lens
-import Linear (zero, identity)
+import Linear (V3(..), zero, identity)
 
 -- events
 data Event = KeyEvent Key Int KeyState ModifierKeys
@@ -15,15 +15,23 @@ data Event = KeyEvent Key Int KeyState ModifierKeys
            | UpdateRenderStates
 
 -- possible outcomes (programs)
+data SceneObject = SceneObject {
+  _objectPosition :: V3 Float,
+  _objectType :: Int
+}
+
 data SceneState = SceneState {
   _camera :: Placement,
-  _player :: Position
+  _player :: Position,
+  _objects :: [SceneObject]
 }
+
 Lens.makeLenses ''SceneState
 
 createSceneState = SceneState {
   _camera = (zero, identity),
-  _player = zero
+  _player = zero,
+  _objects = []
 }
 
 data GUIState = GUIState {

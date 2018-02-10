@@ -20,7 +20,7 @@ import Graphics.UI.GLFW (Window, getFramebufferSize, swapBuffers)
 import Linear (V3(..), V4(..))
 import Logger (Logger)
 import OpenGLHelpers
-import Program (SceneState(..), GUIState(..))
+import Program (SceneObject(..), SceneState(..), GUIState(..))
 
 sceneProgramSource = ("shaders/Scene.vert", "shaders/Scene.frag") :: (FilePath, FilePath)
 postProcessingProgramSource = ("shaders/GUI.vert", "shaders/GUI.frag") :: (FilePath, FilePath)
@@ -75,7 +75,7 @@ renderScene logger time sceneState glState@GLState{..} = do
     let (V3 pX pY pZ) = _player sceneState
     setFloat logger programId "fTime" Nothing (realToFrac time)
     setFloat3 logger programId "playerPosition" Nothing (realToFrac pX) (realToFrac pY) (realToFrac pZ)
-    let closestObjects = buildClosestObjectList 100 (testObjects time)
+    let closestObjects = fmap toGLObject $ buildClosestObjectList 100 (_objects sceneState)
     setFloat4Array logger programId "objects" Nothing (fmap realToFrac . concatMap toList $ closestObjects)
     let (V3 eyeX eyeY eyeZ, eyeRotation) = _camera sceneState
     setFloat3 logger programId "eyePosition" Nothing (realToFrac eyeX) (realToFrac eyeY) (realToFrac eyeZ)
@@ -115,39 +115,22 @@ withFullscreenGLSLProgram logger dummyVAO emptyBO targetBuffer (width, height) p
   setupAction programId
   glDrawArrays GL_TRIANGLES 0 3
 
--- this is just tempoary
-testObjects :: Double -> [V4 Float]
-testObjects time =
-  let getZ offset =
-        let z = ((realToFrac time) * 3 + offset)
-        in z - (fromIntegral . round $ z / 60) * 60
-  in [ V4 ( 1) ( 1) (getZ 0) 1.0,
-       V4 (-1) ( 1) (getZ 4) 2.0,
-       V4 ( 1) (-1) (getZ 8) 2.0,
-       V4 (-1) (-1) (getZ 12) 1.0,
-       V4 ( 0) ( 0) (getZ 16) 1.0,
-       V4 ( 1) ( 1) (getZ 20) 1.0,
-       V4 (-1) ( 1) (getZ 24) 2.0,
-       V4 (-1) ( 1) (getZ 28) 2.0,
-       V4 (-1) ( 1) (getZ 32) 2.0,
-       V4 ( 1) ( 1) (getZ 36) 1.0,
-       V4 (-1) ( 1) (getZ 40) 2.0,
-       V4 ( 1) (-1) (getZ 44) 2.0,
-       V4 (-1) (-1) (getZ 48) 2.0,
-       V4 ( 0) ( 0) (getZ 52) 1.0
-  ]
-
-buildClosestObjectList :: Int -> [V4 Float] -> [V4 Float]
+buildClosestObjectList :: Int -> [SceneObject] -> [SceneObject]
 buildClosestObjectList len objects =
   let halfLength = len `div` 2
       indexes = [-halfLength..len - halfLength]
-      zOrderedObjects = sortWith (\(V4 _ _ z _) -> z) $ objects
+      zOrderedObjects = sortWith (\(SceneObject (V3 _ _ z) _) -> z) $ objects
   in build indexes zOrderedObjects
-  where zDistance i (V4 _ _ z _) = abs (fromIntegral i - z)
-        build :: [Int] -> [V4 Float] -> [V4 Float]
+  where zDistance i (SceneObject (V3 _ _ z) _) = abs (fromIntegral i - z)
+        build :: [Int] -> [SceneObject] -> [SceneObject]
         build [] _ = []
+        build _ [] = []
         build (x:xs) all@(y:[]) = y:build xs all
         build (x:xs) all@(y:y2:ys) =
           if (zDistance x y < zDistance x y2)
             then y:build xs all
             else y2:build xs (y2:ys)
+
+toGLObject :: SceneObject -> V4 Float
+toGLObject SceneObject{..} = V4 x y z (fromIntegral _objectType)
+  where V3 x y z = _objectPosition

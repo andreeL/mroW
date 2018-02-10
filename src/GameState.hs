@@ -11,6 +11,7 @@ import Lens.Micro.Platform
 import Linear (V3(..), Quaternion(..), fromQuaternion, zero)
 import Player (Player, createPlayer)
 import Prelude hiding (lookup)
+import System.Random (StdGen)
 import Text.Read (readMaybe)
 
 varActionUp     = "up"
@@ -25,22 +26,29 @@ type VariableName = String
 type VariableValue = String
 type Variables = Map VariableName VariableValue
 
+data Model = Cat Int
+type GameObject = (Position, Model)
+
 data GameState = GameState {
+  _randomGen :: StdGen,
   _variables :: Variables,
   _lastCameraPlacement :: Placement,
   _lastPlayerPosition :: Position,
   _camera :: Camera,
-  _player :: Player
+  _player :: Player,
+  _gameObjects :: [GameObject]
 }
 makeLenses ''GameState
 
-createGameState :: GameState
-createGameState = let
+createGameState :: StdGen -> GameState
+createGameState randomGen = let
+  _randomGen = randomGen
   _variables = empty
   _lastCameraPlacement = (V3 0 0 0, fromQuaternion $ Quaternion 1 zero)
   _lastPlayerPosition = zero
   _camera = createCamera CinematicCamera
   _player = createPlayer zero
+  _gameObjects = []
   in GameState{..}
 
 setMousePos :: (Double, Double) -> GameState -> ((), GameState)

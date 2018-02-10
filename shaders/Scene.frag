@@ -11,14 +11,13 @@ uniform vec4[100] objects;
 const float epsilon = 0.005;
 const float maxDistance = 30.f; // TODO: set this to something sensible
 
-vec3 qubeDisplacement = vec3(0.5, 0, fTime * -3);
-const vec3 qubeHalfDistance = vec3(0.125, 0.025, 0.125);
+vec3 surroundingDisplacement = vec3(0.5, 0, fTime * -1);
 
 struct Scene
 {
     // closest cube
-    vec3 closestCubePosition;
-    float mCubeDistance;
+    vec3 mClosestVertexPosition;
+    float mClosestVertexDistance;
 
     // surrounding worm hole (cylinder)
     float mCylinderDistance;
@@ -54,14 +53,18 @@ void getClosestObject(in vec3 position, out int closestObjectId, out float close
 
 void getScene(in vec3 position, out Scene scene)
 {
-    scene.closestCubePosition = fract(position + qubeDisplacement) - 0.5;
-    scene.mCubeDistance = length(max(abs(scene.closestCubePosition) - qubeHalfDistance,0.0));
+    scene.mClosestVertexPosition = fract(position + surroundingDisplacement) - 0.5;
+    scene.mClosestVertexDistance = length(scene.mClosestVertexPosition) - 0.1;
+
+    // const vec3 qubeHalfDistance = vec3(0.125, 0.025, 0.125);
+    // scene.mClosestVertexPosition = fract(position + surroundingDisplacement) - 0.5;
+    // scene.mClosestVertexDistance = length(max(abs(scene.mClosestVertexPosition) - qubeHalfDistance,0.0));
 
     float cylinderExtent = 2.0;
     scene.mCylinderDistance = cylinderExtent - length(position.xy);
 
-    const float playerRadious = 0.5;
-    scene.mPlayerDistance = length(playerPosition - position) - playerRadious;
+    const float playerRadius = 0.15;
+    scene.mPlayerDistance = length(playerPosition - position) - playerRadius;
 
     getClosestObject(position, scene.mClosestObjectId, scene.mClosestObjectDistance);
 }
@@ -69,7 +72,7 @@ void getScene(in vec3 position, out Scene scene)
 float getMinimumDistance(in Scene scene)
 {
     return min(
-            min(scene.mCubeDistance, scene.mClosestObjectDistance),
+            min(scene.mClosestVertexDistance, scene.mClosestObjectDistance),
             min(scene.mCylinderDistance, scene.mPlayerDistance)
     );
 }
@@ -144,15 +147,15 @@ void getMaterial(in vec3 position, out vec3 normal, out vec3 albedo, out float r
         normal = getNormal(position);
         if (closest == scene.mCylinderDistance)
         {
-            float z = qubeDisplacement.z + position.z;
+            float z = surroundingDisplacement.z + position.z;
             albedo = 0.5 * vec3(sin(position.x * 25 + z * 23), 1, sin(position.y * 25 + z * 13));
             roughness = 1;
             metallic = 0; 
         }
-        else if (closest == scene.mCubeDistance)
+        else if (closest == scene.mClosestVertexDistance)
         {
-            albedo = vec3(0, 0, 1);
-            roughness = 0.4;
+            albedo = vec3(0, 0, 0.5);
+            roughness = 0.2;
             metallic = 0;
         }
         else // if (closest == scene.mPlayerDistance)
