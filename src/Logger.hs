@@ -11,7 +11,7 @@ import System.IO (openFile, IOMode(AppendMode), hPutStrLn, hClose, hFlush, stdou
 data Channel = Console | File String
 type Logger = String -> IO ()
 
-withLogger :: [Channel] -> (Logger -> IO()) -> IO ()
+withLogger :: [Channel] -> (Logger -> IO a) -> IO a
 withLogger channels callback = do
     logChannels <- forM channels $ \channel -> case channel of
         Console -> pure $ (\message -> putStrLn message *> hFlush stdout, pure ())
@@ -21,6 +21,8 @@ withLogger channels callback = do
 
     mutex <- newMVar ()
 
-    callback $ \message -> forM_ logChannels $ \(logger, _) -> logger message
+    result <- callback $ \message -> withMVar mutex $ const $ forM_ logChannels $ \(logger, _) -> logger message
 
     forM_ logChannels $ \(_, cleanup) -> cleanup
+
+    pure result
