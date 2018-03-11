@@ -54,7 +54,7 @@ void getClosestObject(in vec3 position, out int closestObjectId, out float close
 void getScene(in vec3 position, out Scene scene)
 {
     scene.mClosestVertexPosition = fract(position + surroundingDisplacement) - 0.5;
-    scene.mClosestVertexDistance = length(scene.mClosestVertexPosition) - 0.1;
+    scene.mClosestVertexDistance = length(scene.mClosestVertexPosition) - 0.01;
 
     // const vec3 qubeHalfDistance = vec3(0.125, 0.025, 0.125);
     // scene.mClosestVertexPosition = fract(position + surroundingDisplacement) - 0.5;
@@ -114,21 +114,21 @@ void getObjectMaterial(in int objectId, in vec3 position, out vec3 normal, out v
     switch (int(object.w))
     {
         case 1:
-            albedo = vec3(0.8, 0.2, 0.7);
-            roughness = 0.8;
-            metallic = 0;
+            albedo = vec3(1.0, 1.0, 0.0);
+            roughness = 0.1;
+            metallic = 1;
             break;
 
         case 2:
-            albedo = vec3(0.3, 0.6, 0.6);
-            roughness = 0.7;
-            metallic = 0;
+            albedo = vec3(1.0, 1.0, 0.0);
+            roughness = 0.1;
+            metallic = 1;
             break;
 
         default: // we never get here
-            albedo = vec3(1);
-            roughness = 1;
-            metallic = 0;
+            albedo = vec3(1.0, 1.0, 0.0);
+            roughness = 0.1;
+            metallic = 1;
             break;
     }
 }
@@ -161,7 +161,7 @@ void getMaterial(in vec3 position, out vec3 normal, out vec3 albedo, out float r
         else // if (closest == scene.mPlayerDistance)
         {
             albedo = vec3(0.71, 0.71, 0.71);
-            roughness = 0.15;
+            roughness = 0.95;
             metallic = 1;
         }
     }

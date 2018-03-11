@@ -129,11 +129,11 @@ updateGameObjects time gameObjects randomGen =
             minDistance = 4
             (x, randomGen') = randomR (-1, 1) randomGen
             (y, randomGen'') = randomR (-1, 1) randomGen'
-            (z, randomGen''') = randomR (minZ - minDistance - 10, minZ - minDistance) randomGen''
+            (z, randomGen''') = randomR (minZ - minDistance - 5, minZ - minDistance) randomGen''
             newObjectNeeded [] = True
             newObjectNeeded xs = (>minZ) . minimum . fmap (\(V3 _ _ z, _) -> z) $ xs
         in if newObjectNeeded movedObjects then ([(V3 x y z, Cat 1)], randomGen''') else ([], randomGen)
    in (addedObjects ++ movedObjects, randomGen')
 
 tryTakeGameObjects :: Position -> [GameObject] -> ([GameObject], [GameObject])
-tryTakeGameObjects playerPosition gameObjects = partition (\(objectPosition, _) -> (playerPosition `distance` objectPosition) > 0.25) gameObjects
+tryTakeGameObjects playerPosition gameObjects = partition (\(objectPosition, _) -> (playerPosition `distance` objectPosition) > 0.4) gameObjects
