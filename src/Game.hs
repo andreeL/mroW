@@ -62,16 +62,15 @@ handleUpdateEvent f state = ([], f state)
 
 handleTickEvent :: Double -> DeltaTime -> ProgramBuilder
 handleTickEvent time deltaTime state@GameState{..} = let
-  isSet var = isJust . getVariable var $ state
-  
   (playerPosition', player') = getBehaviour _player PlayerInput {
     _time = time,
     _deltaTime = deltaTime,
-    _moveUp = isJust . getVariable varActionUp $ state,
-    _moveLeft = isJust . getVariable varActionLeft $ state,
-    _moveDown = isJust . getVariable varActionDown $ state,
-    _moveRight = isJust . getVariable varActionRight $ state
+    _moveUp = isSet varActionUp,
+    _moveLeft = isSet varActionLeft,
+    _moveDown = isSet varActionDown,
+    _moveRight = isSet varActionRight
   }
+    where isSet variable = isJust . getVariable variable $ state
 
   (cameraPlacement', camera') = getBehaviour _camera CameraInput {
     _time = time,
