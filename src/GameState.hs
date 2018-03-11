@@ -36,6 +36,8 @@ data GameState = GameState {
   _lastPlayerPosition :: Position,
   _camera :: Camera,
   _player :: Player,
+  _playerPoints :: Int,
+  _playerEnergy :: Float,
   _gameObjects :: [GameObject]
 }
 makeLenses ''GameState
@@ -48,6 +50,8 @@ createGameState randomGen = let
   _lastPlayerPosition = zero
   _camera = createCamera CinematicCamera
   _player = createPlayer zero
+  _playerPoints = 0
+  _playerEnergy = 1
   _gameObjects = []
   in GameState{..}
 
@@ -56,15 +60,6 @@ setMousePos newMousePos = storeVariable varMousePos newMousePos
 
 getMousePos :: GameState -> (Double, Double)
 getMousePos = fromMaybe (0, 0) . readVariable varMousePos
-
-addPoints :: Int -> GameState -> ((), GameState)
-addPoints points gameState =
-  let currentPoints = getPoints gameState
-      newPoints = currentPoints + points
-  in setVariable varPoints (show newPoints) gameState
-
-getPoints :: GameState -> Int
-getPoints gameState = fromMaybe 0 (readMaybe =<< getVariable varPoints gameState)
 
 getCameraMode :: GameState -> CameraMode
 getCameraMode = fromMaybe CinematicCamera . readVariable varCameraMode

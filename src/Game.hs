@@ -30,15 +30,15 @@ handleEvent (MouseEvent x y)                    = handleMouseEvent (x, y)
 handleEvent (TickEvent time deltaTime)          = handleTickEvent time deltaTime
 handleEvent (UpdateRenderStates)                = handleUpdateRenderStatesEvent
 
-setOrRemove :: VariableName -> VariableValue -> Bool -> GameState -> GameState
-setOrRemove variableName variableValue doSet =
-  snd . if (doSet == True)
-    then setVariable variableName variableValue
-    else removeVariable variableName
 
 handleKeyEvent :: GLFW.Key -> Int -> GLFW.KeyState -> GLFW.ModifierKeys -> ProgramBuilder
 handleKeyEvent key scancode action mods state =
-  let keyDown = action /= GLFW.KeyState'Released
+  let setOrRemove variableName variableValue doSet = snd . if (doSet == True)
+        then setVariable variableName variableValue
+        else removeVariable variableName
+  
+      keyDown = action /= GLFW.KeyState'Released
+  
       state' = fromMaybe state $ case key of
         GLFW.Key'W -> Just $ setOrRemove varActionUp "" keyDown state
         GLFW.Key'A -> Just $ setOrRemove varActionLeft "" keyDown state
@@ -49,7 +49,6 @@ handleKeyEvent key scancode action mods state =
       (program, state'') = fromMaybe ([], state') $ if action == GLFW.KeyState'Pressed then
         case key of
           GLFW.Key'F2 -> Just ([], snd . useNextCameraMode $ state')
-          GLFW.Key'Space -> Just ([PlaySound $ Piano (getPoints state')], snd . addPoints 1 $ state')
           _ -> Nothing
         else Nothing
   
@@ -62,10 +61,10 @@ handleUpdateEvent :: (GameState -> GameState) -> ProgramBuilder
 handleUpdateEvent f state = ([], f state)
 
 handleTickEvent :: Double -> DeltaTime -> ProgramBuilder
-handleTickEvent time deltaTime state = let
+handleTickEvent time deltaTime state@GameState{..} = let
   isSet var = isJust . getVariable var $ state
   
-  playerInput = PlayerInput {
+  (playerPosition', player') = getBehaviour _player PlayerInput {
     _time = time,
     _deltaTime = deltaTime,
     _moveUp = isJust . getVariable varActionUp $ state,
@@ -73,29 +72,46 @@ handleTickEvent time deltaTime state = let
     _moveDown = isJust . getVariable varActionDown $ state,
     _moveRight = isJust . getVariable varActionRight $ state
   }
-  (_lastPlayerPosition, _player) = getBehaviour (state ^. player) playerInput
 
-  cameraInput = CameraInput {
+  (cameraPlacement', camera') = getBehaviour _camera CameraInput {
     _time = time,
     _deltaTime = deltaTime,
     _mouseXY = getMousePos state,
-    _target = _lastPlayerPosition
+    _target = playerPosition'
   }
-  _variables = state ^. variables
-  (_lastCameraPlacement, _camera) = getBehaviour (state ^. camera) cameraInput
-  (updatedGameObjects, _randomGen) = updateGameObjects (getSeconds deltaTime) (state ^. gameObjects) (state ^. randomGen)
-  (_gameObjects, points) = tryTakeGameObjects _lastPlayerPosition updatedGameObjects
-  newGameState = snd . addPoints points $ GameState{..}
-  in (if (points > 0) then [PlaySound $ Piano (getPoints newGameState)] else [], newGameState)
+  
+  (updatedGameObjects, randomGen') = updateGameObjects (getSeconds deltaTime) _gameObjects _randomGen
+  (gameObjects', takenGameObjects) = tryTakeGameObjects playerPosition' updatedGameObjects
+  noOfObjectsTaken = length takenGameObjects
+  playerPoints' = _playerPoints + noOfObjectsTaken
+
+  in (
+    if (noOfObjectsTaken > 0) then [PlaySound $ Piano playerPoints'] else [],
+    GameState {
+      _randomGen = randomGen',
+      _variables = _variables,
+      _lastCameraPlacement = cameraPlacement',
+      _lastPlayerPosition = playerPosition',
+      _camera = camera',
+      _player = player',
+      _playerPoints = playerPoints',
+      _playerEnergy = max 0 . min 1 $ (fromIntegral noOfObjectsTaken) + _playerEnergy - (getSeconds deltaTime) * 0.1,
+      _gameObjects = gameObjects'
+    }
+  )
 
 handleUpdateRenderStatesEvent :: ProgramBuilder
-handleUpdateRenderStatesEvent state =
-  let sceneState = SceneState { _camera = state ^. lastCameraPlacement,
-                                _player = state ^. lastPlayerPosition,
-                                _objects = fmap toSceneObject $ state ^. gameObjects
+handleUpdateRenderStatesEvent state@GameState{..} =
+  let sceneState = SceneState { _camera = _lastCameraPlacement,
+                                _player = _lastPlayerPosition,
+                                _objects = fmap toSceneObject _gameObjects
                               }
-      commands = [ UpdateScene (const sceneState),
-                   UpdateGUI $ \guiState -> guiState & points .~ (getPoints state)
+      guiState = GUIState { _points = _playerPoints,
+                            _energy = _playerEnergy,
+                            _currentMenuOption = Nothing
+                          }
+      commands = [ UpdateScene $ const sceneState,
+                   UpdateGUI $ const guiState
                  ]
   in (commands, state)
 
@@ -120,6 +136,5 @@ updateGameObjects time gameObjects randomGen =
         in if newObjectNeeded movedObjects then ([(V3 x y z, Cat 1)], randomGen''') else ([], randomGen)
    in (addedObjects ++ movedObjects, randomGen')
 
-tryTakeGameObjects :: Position -> [GameObject] -> ([GameObject], Int)
-tryTakeGameObjects playerPosition gGameObjects = (objectsMissed, length objectsTaken)
-  where (objectsMissed, objectsTaken) = partition (\(objectPosition, _) -> (playerPosition `distance` objectPosition) > 0.25) gGameObjects
+tryTakeGameObjects :: Position -> [GameObject] -> ([GameObject], [GameObject])
+tryTakeGameObjects playerPosition gameObjects = partition (\(objectPosition, _) -> (playerPosition `distance` objectPosition) > 0.25) gameObjects

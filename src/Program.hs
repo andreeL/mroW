@@ -37,12 +37,14 @@ createSceneState = SceneState {
 data GUIState = GUIState {
   --_mousePos :: (Double, Double), -- TODO: we don't really use this for anything ATM so we could remove it
   _points :: Int,
+  _energy :: Float,
   _currentMenuOption :: Maybe Int
 }
 Lens.makeLenses ''GUIState
 
 createGUIState = GUIState {
-  _points = 0,
+  _points = -1,
+  _energy = 0,
   _currentMenuOption = Nothing
 }
 

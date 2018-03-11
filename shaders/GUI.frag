@@ -4,6 +4,7 @@ varying vec2 screenUV;
 varying vec2 screenXY;
 uniform float fTime = 0;
 uniform int gPoints = 0;
+uniform float gEnergy = 1.0;
 uniform int gCurrentMenuOption = -1;
 
 uniform sampler2D sceneTexture;
@@ -142,13 +143,23 @@ vec4 getMenuExitText()
     return getMenuTextColor(distance, gCurrentMenuOption == 1);
 }
 
+vec4 getEnergyBarColor()
+{
+    if (abs(screenUV.x - 0.5) > 0.45 * gEnergy || screenUV.y < 0.05 || screenUV.y > 0.1)
+        return vec4(0);
+
+    return vec4(1, 0, 0, 1);
+}
+
 void main()
 {
-    vec4 sceneColor = texture(sceneTexture, screenUV);
-    vec4 pointsColor = getNumberText(vec4(0.85, 0.8, 0.15, float(gPoints)));
+    vec4 scoreColor = gPoints >= 0 ? getNumberText(vec4(0.85, 0.8, 0.15, float(gPoints))) : vec4(0);
+    vec4 energyBarColor = getEnergyBarColor();
+    vec4 hudColor = blendOnto(scoreColor, energyBarColor);
     vec4 menuColor = blendOnto(getMenuStartText(), getMenuExitText());
-    vec4 guiColor = gCurrentMenuOption == -1 ? pointsColor : blendOnto(menuColor, pointsColor);
+    vec4 guiColor = gCurrentMenuOption == -1 ? hudColor : blendOnto(menuColor, hudColor);
 
+    vec4 sceneColor = texture(sceneTexture, screenUV);
     vec4 finalColor = blendOnto(sceneColor, guiColor);
     gl_FragColor = pow(finalColor, vec4(1.0/2.2)); // gamma corrected
 }
