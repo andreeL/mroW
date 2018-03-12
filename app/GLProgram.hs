@@ -94,7 +94,8 @@ renderGUI logger time window guiState glState@GLState{..} = do
     glBindTexture GL_TEXTURE_2D (snd _font)
     setInt logger programId "fontTexture" Nothing 1
     setInt logger programId "gPoints" Nothing (fromIntegral . _points $ guiState)
-    setFloat logger programId "gEnergy" Nothing (_energy $ guiState)
+    setFloat logger programId "gEnergy" Nothing (_energy guiState)
+    setInt logger programId "gGameOver" Nothing (if _showGameOver guiState then 1 else 0)
     setInt logger programId "gCurrentMenuOption" Nothing (fromIntegral . fromMaybe (-1) . _currentMenuOption $ guiState)
   pure glState
 

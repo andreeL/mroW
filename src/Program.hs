@@ -38,6 +38,7 @@ data GUIState = GUIState {
   --_mousePos :: (Double, Double), -- TODO: we don't really use this for anything ATM so we could remove it
   _points :: Int,
   _energy :: Float,
+  _showGameOver :: Bool,
   _currentMenuOption :: Maybe Int
 }
 Lens.makeLenses ''GUIState
@@ -45,6 +46,7 @@ Lens.makeLenses ''GUIState
 createGUIState = GUIState {
   _points = -1,
   _energy = 0,
+  _showGameOver = False,
   _currentMenuOption = Nothing
 }
 

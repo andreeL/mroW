@@ -5,6 +5,7 @@ varying vec2 screenXY;
 uniform float fTime = 0;
 uniform int gPoints = 0;
 uniform float gEnergy = 1.0;
+uniform int gGameOver = 0;
 uniform int gCurrentMenuOption = -1;
 
 uniform sampler2D sceneTexture;
@@ -92,22 +93,22 @@ vec4 getMenuStartText()
     if (screenUV.x < downLeft.x || screenUV.x > upRight.x || screenUV.y < downLeft.y || screenUV.y > upRight.y)
         return vec4(0.0);
 
-    const vec4 text[19] = vec4[19]( // Enter the mroW hole
+    const vec4 text[16] = vec4[16]( // Enter the mroW hole
         vec4(position + vec2(-128.0,-3) * size, size2, 69), // 'E'
         vec4(position + vec2(-113.0,-4) * size, size2, 110), // 'n'
         vec4(position + vec2(-101.0,-5) * size, size2, 116), // 't'
         vec4(position + vec2(-90.0,-5) * size, size2, 101), // 'e'
         vec4(position + vec2(-73.0,-4) * size, size2, 114), // 'r'
-        vec4(position + vec2(-64.0,-3) * size, size2, 32), // ' '
+        //vec4(position + vec2(-64.0,-3) * size, size2, 32), // ' '
         vec4(position + vec2(-52.0,-5) * size, size2, 116), // 't'
         vec4(position + vec2(-41.0,-4) * size, size2, 104), // 'h'
         vec4(position + vec2(-28.0,-5) * size, size2, 101), // 'e'
-        vec4(position + vec2(-12.0,-3) * size, size2, 32), // ' '
+        //vec4(position + vec2(-12.0,-3) * size, size2, 32), // ' '
         vec4(position + vec2(0.0,-6) * size, size2, 109), // 'm'
         vec4(position + vec2(19.0,-4) * size, size2, 114), // 'r'
         vec4(position + vec2(29.0,-4) * size, size2, 111), // 'o'
         vec4(position + vec2(42.0,-5) * size, size2, 87), // 'W'
-        vec4(position + vec2(62.0,-3) * size, size2, 32), // ' '
+        //vec4(position + vec2(62.0,-3) * size, size2, 32), // ' '
         vec4(position + vec2(74.0,-4) * size, size2, 104), // 'h'
         vec4(position + vec2(87.0,-4) * size, size2, 111), // 'o'
         vec4(position + vec2(100.0,-6) * size, size2, 108), // 'l'
@@ -115,7 +116,7 @@ vec4 getMenuStartText()
     );
     
     float distance = 1;
-    for (int i = 0; i < 19; ++i)
+    for (int i = 0; i < 16; ++i)
         distance = min(distance, getDistanceToChar(text[i]));
     return getMenuTextColor(distance, gCurrentMenuOption == 0);
 }
@@ -151,13 +152,45 @@ vec4 getEnergyBarColor()
     return vec4(1, 0, 0, 1);
 }
 
+vec4 getGameOverText()
+{
+    const vec2 position = vec2(0.5, 0.5);
+    const float size = 0.0025 * 2;
+    const float size2 = 0.085 * 2;
+    const vec2 downLeft = vec2(-72.5,-4) * size + position;
+    const vec2 upRight = vec2(72.5,20) * size + position;
+    if (screenUV.x < downLeft.x || screenUV.x > upRight.x || screenUV.y < downLeft.y || screenUV.y > upRight.y)
+        return vec4(0.0);
+
+    const vec4 text[8] = vec4[8]( // Game Over
+        vec4(position + vec2(-70.5,-5) * size, size2, 71), // 'G'
+        vec4(position + vec2(-54.5,-5) * size, size2, 97), // 'a'
+        vec4(position + vec2(-35.5,-6) * size, size2, 109), // 'm'
+        vec4(position + vec2(-16.5,-5) * size, size2, 101), // 'e'
+        //vec4(position + vec2(-0.5,-3) * size, size2, 32), // ' '
+        vec4(position + vec2(11.5,-2) * size, size2, 79), // 'O'
+        vec4(position + vec2(26.5,-4) * size, size2, 118), // 'v'
+        vec4(position + vec2(39.5,-5) * size, size2, 101), // 'e'
+        vec4(position + vec2(56.5,-4) * size, size2, 114) // 'r'
+    );
+
+    float distance = 1;
+    for (int i = 0; i < 8; ++i)
+        distance = min(distance, getDistanceToChar(text[i]));
+
+    return getMenuTextColor(distance, false);
+}
+
 void main()
 {
     vec4 scoreColor = gPoints >= 0 ? getNumberText(vec4(0.85, 0.8, 0.15, float(gPoints))) : vec4(0);
     vec4 energyBarColor = getEnergyBarColor();
+    vec4 gameOverColor = getGameOverText();
     vec4 hudColor = blendOnto(scoreColor, energyBarColor);
     vec4 menuColor = blendOnto(getMenuStartText(), getMenuExitText());
-    vec4 guiColor = gCurrentMenuOption == -1 ? hudColor : blendOnto(menuColor, hudColor);
+
+    // we never show "game over" and the Menu at the same time
+    vec4 guiColor = gCurrentMenuOption == -1 ? (gGameOver == 0 ? hudColor : blendOnto(hudColor, gameOverColor)) : blendOnto(hudColor, menuColor);
 
     vec4 sceneColor = texture(sceneTexture, screenUV);
     vec4 finalColor = blendOnto(sceneColor, guiColor);

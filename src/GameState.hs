@@ -38,7 +38,8 @@ data GameState = GameState {
   _player :: Player,
   _playerPoints :: Int,
   _playerEnergy :: Float,
-  _gameObjects :: [GameObject]
+  _gameObjects :: [GameObject],
+  _gameOver :: Bool
 }
 makeLenses ''GameState
 
@@ -53,6 +54,7 @@ createGameState randomGen = let
   _playerPoints = 0
   _playerEnergy = 1
   _gameObjects = []
+  _gameOver = False
   in GameState{..}
 
 setMousePos :: (Double, Double) -> GameState -> ((), GameState)

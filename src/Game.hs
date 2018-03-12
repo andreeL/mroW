@@ -33,26 +33,29 @@ handleEvent (UpdateRenderStates)                = handleUpdateRenderStatesEvent
 
 handleKeyEvent :: GLFW.Key -> Int -> GLFW.KeyState -> GLFW.ModifierKeys -> ProgramBuilder
 handleKeyEvent key scancode action mods state =
-  let setOrRemove variableName variableValue doSet = snd . if (doSet == True)
-        then setVariable variableName variableValue
-        else removeVariable variableName
-  
-      keyDown = action /= GLFW.KeyState'Released
-  
-      state' = fromMaybe state $ case key of
-        GLFW.Key'W -> Just $ setOrRemove varActionUp "" keyDown state
-        GLFW.Key'A -> Just $ setOrRemove varActionLeft "" keyDown state
-        GLFW.Key'S -> Just $ setOrRemove varActionDown "" keyDown state
-        GLFW.Key'D -> Just $ setOrRemove varActionRight "" keyDown state
-        _ -> Nothing
+  if _gameOver state
+    then ([], state)
+    else
+      let setOrRemove variableName variableValue doSet = snd . if (doSet == True)
+            then setVariable variableName variableValue
+            else removeVariable variableName
+      
+          keyDown = action /= GLFW.KeyState'Released
+      
+          state' = fromMaybe state $ case key of
+            GLFW.Key'W -> Just $ setOrRemove varActionUp "" keyDown state
+            GLFW.Key'A -> Just $ setOrRemove varActionLeft "" keyDown state
+            GLFW.Key'S -> Just $ setOrRemove varActionDown "" keyDown state
+            GLFW.Key'D -> Just $ setOrRemove varActionRight "" keyDown state
+            _ -> Nothing
 
-      (program, state'') = fromMaybe ([], state') $ if action == GLFW.KeyState'Pressed then
-        case key of
-          GLFW.Key'F2 -> Just ([], snd . useNextCameraMode $ state')
-          _ -> Nothing
-        else Nothing
-  
-  in (program, state'')
+          (program, state'') = fromMaybe ([], state') $ if action == GLFW.KeyState'Pressed then
+            case key of
+              GLFW.Key'F2 -> Just ([], snd . useNextCameraMode $ state')
+              _ -> Nothing
+            else Nothing
+      
+      in (program, state'')
 
 handleMouseEvent :: (Double, Double) -> ProgramBuilder
 handleMouseEvent mousePos state = ([], snd . setMousePos mousePos $ state)
@@ -80,12 +83,17 @@ handleTickEvent time deltaTime state@GameState{..} = let
   }
   
   (updatedGameObjects, randomGen') = updateGameObjects (getSeconds deltaTime) _gameObjects _randomGen
-  (gameObjects', takenGameObjects) = tryTakeGameObjects playerPosition' updatedGameObjects
+
+  (gameObjects', takenGameObjects) = if _gameOver
+    then (updatedGameObjects, [])
+    else tryTakeGameObjects playerPosition' updatedGameObjects
+  
   noOfObjectsTaken = length takenGameObjects
   playerPoints' = _playerPoints + noOfObjectsTaken
+  playerEnergy' = max 0 . min 1 $ (fromIntegral noOfObjectsTaken) + _playerEnergy - (getSeconds deltaTime) * 0.1
 
   in (
-    if (noOfObjectsTaken > 0) then [PlaySound $ Piano playerPoints'] else [],
+    if (_playerPoints /= playerPoints') then [PlaySound $ Piano playerPoints'] else [],
     GameState {
       _randomGen = randomGen',
       _variables = _variables,
@@ -94,8 +102,9 @@ handleTickEvent time deltaTime state@GameState{..} = let
       _camera = camera',
       _player = player',
       _playerPoints = playerPoints',
-      _playerEnergy = max 0 . min 1 $ (fromIntegral noOfObjectsTaken) + _playerEnergy - (getSeconds deltaTime) * 0.1,
-      _gameObjects = gameObjects'
+      _playerEnergy = playerEnergy',
+      _gameObjects = gameObjects',
+      _gameOver = _gameOver || (playerEnergy' <= 0)
     }
   )
 
@@ -107,6 +116,7 @@ handleUpdateRenderStatesEvent state@GameState{..} =
                               }
       guiState = GUIState { _points = _playerPoints,
                             _energy = _playerEnergy,
+                            _showGameOver = _gameOver,
                             _currentMenuOption = Nothing
                           }
       commands = [ UpdateScene $ const sceneState,
