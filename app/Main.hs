@@ -123,7 +123,7 @@ runLoop logger previousTime eventQueue eventHandler programState window = do
     True -> pure programState
     False -> do
       time <- fmap (fromMaybe 0) GLFW.getTime
-      let deltaTime = DeltaTime {getSeconds = realToFrac . max 0 . min 1 $ (time - previousTime)}
+      let deltaTime = DeltaTime {getSeconds = realToFrac . max 0 . min (1/16) $ (time - previousTime)}
 
       let runCommand :: ProgramState -> Command -> IO ProgramState
           runCommand programState@ProgramState{..} (Terminate         ) = GLFW.setWindowShouldClose window True *> pure programState
