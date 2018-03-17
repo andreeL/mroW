@@ -28,7 +28,7 @@ data CameraInput = CameraInput {
 -- a (possibly) stateful camera
 type Camera = Behaviour CameraInput Placement
 
-data CameraMode = StaticCamera | CinematicCamera | FreeCamera deriving (Bounded, Enum, Eq, Show, Read)
+data CameraMode = StaticCamera | CinematicCamera | FreeCamera | LookAtCamera | LookAtRotatingCamera deriving (Bounded, Enum, Eq, Show, Read)
 nextCameraMode :: CameraMode -> CameraMode
 nextCameraMode cameraMode | cameraMode == maxBound = minBound
                           | otherwise              = succ cameraMode
@@ -38,6 +38,8 @@ createCamera cameraMode = case cameraMode of
     StaticCamera -> createStaticCamera (V3 0 0 (-1.5), fromQuaternion $ Quaternion 1 zero)
     CinematicCamera -> createCinematicCamera (V3 0 0 (-1.5))
     FreeCamera -> createFreeCamera
+    LookAtCamera -> createLookAtCamera
+    LookAtRotatingCamera -> createLookAtRotatingCamera
 
 createStaticCamera :: Placement -> Camera
 createStaticCamera placement = pure placement
@@ -55,6 +57,17 @@ createFreeCamera = arr $ \CameraInput{..} ->
       rotationX = axisAngle (V3 0 1 0) (realToFrac (-(fst _mouseXY)) / 50)
       rotationY = axisAngle (V3 1 0 0) (realToFrac (-(snd _mouseXY)) / 50)
    in (eyePosition, fromQuaternion (rotationY * rotationX))
+
+createLookAtCamera :: Camera
+createLookAtCamera = arr $ \CameraInput{..} ->
+  let (mouseX, mouseY) = ((realToFrac (-(fst _mouseXY)) / 50), realToFrac (-(snd _mouseXY)) / 50)
+      eyePosition = _target + (V3 ((sin mouseX) * (sin mouseY)) (cos mouseY) ((cos mouseX) * (sin mouseY))) ^* 0.5
+   in (eyePosition, lookAt _target eyePosition)
+
+createLookAtRotatingCamera :: Camera
+createLookAtRotatingCamera = arr $ \CameraInput{..} ->
+  let eyePosition = _target + (V3 (sin $ realToFrac _time) 0 (cos $ realToFrac _time)) ^* 0.5
+  in (eyePosition, lookAt _target eyePosition)
 
 follow :: DeltaTime -> Position -> Position -> Position
 follow deltaTime target origin =
