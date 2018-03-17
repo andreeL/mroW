@@ -51,6 +51,65 @@ void getClosestObject(in vec3 position, out int closestObjectId, out float close
     }
 }
 
+float getEllipsoidDistance(in vec3 relativePosition, in vec3 radius)
+{
+    return (length(relativePosition / radius) - 1.0) * min(min(radius.x, radius.y), radius.z);
+}
+
+vec3 getRelativePlayerPosition(in vec3 position)
+{
+    return playerPosition - position;
+}
+
+vec3 getRelativeHeadPosition(in vec3 position)
+{
+    return getRelativePlayerPosition(position) + vec3(0.012 * sin(6.5 * fTime), 0.2, 0);
+}
+
+float getPlayerHeadDistance(in vec3 position)
+{
+    vec3 relativeHeadPosition = getRelativeHeadPosition(position);
+    float ear1 = getEllipsoidDistance(relativeHeadPosition + vec3(-0.06, 0.09, 0), vec3(0.03, 0.05, 0.03));
+    float ear2 = getEllipsoidDistance(relativeHeadPosition + vec3(0.06, 0.09, 0), vec3(0.03, 0.05, 0.03));
+    return min(min(ear1, ear2), length(relativeHeadPosition) - 0.1);
+}
+
+float getPlayerDistance(in vec3 position) {
+    vec3 relativePosition = getRelativePlayerPosition(position);
+    float body = getEllipsoidDistance(relativePosition, vec3(0.1, 0.15, 0.1));
+    float arm1 = getEllipsoidDistance(relativePosition + vec3(-0.1, 0.08 + 0.01 * sin(7 * fTime), 0), vec3(0.05, 0.025, 0.025));
+    float arm2 = getEllipsoidDistance(relativePosition + vec3(0.1, 0.08 + 0.01 * sin(8 * fTime), 0), vec3(0.05, 0.025, 0.025));
+    float leg1 = getEllipsoidDistance(relativePosition + vec3(-0.1, -0.08 + 0.01 * sin(10 * fTime), 0), vec3(0.05, 0.025, 0.025));
+    float leg2 = getEllipsoidDistance(relativePosition + vec3(0.1, -0.08 + 0.01 * sin(9 * fTime), 0), vec3(0.05, 0.025, 0.025));
+    float tail = getEllipsoidDistance(relativePosition + vec3(0.0, -0.1, 0), vec3(0.025, 0.2, 0.025));
+    float limbs = min(min(arm1, arm2), min(leg1, leg2));
+ 
+    return min(min(body, getPlayerHeadDistance(position)), min(limbs, tail));
+}
+
+void getPlayerMaterial(in vec3 position, in float closestDistance, out vec3 albedo, out float roughness, out float metallic)
+{
+    if (closestDistance == getPlayerHeadDistance(position))
+    {
+        vec3 relativeHeadPosition = getRelativeHeadPosition(position);
+        vec2 uv = relativeHeadPosition.xy / relativeHeadPosition.z;
+
+        // just some fake albedo for now
+        albedo = vec3(uv, relativeHeadPosition.z > 0 ? 1 : 0) * 0.05 + vec3(0.808125, 0.17609375, 0.04234375);
+    }
+    else
+    {
+        vec3 relativePlayerPosition = getRelativePlayerPosition(position);
+        vec2 uv = relativePlayerPosition.xy / relativePlayerPosition.z;
+
+        // just some fake albedo for now
+        albedo = vec3(uv, relativePlayerPosition.z > 0 ? 1 : 0) * 0.05 + vec3(0.808125, 0.17609375, 0.04234375);
+    }
+
+    roughness = 0.95;
+    metallic = 0;
+}
+
 void getScene(in vec3 position, out Scene scene)
 {
     scene.mClosestVertexPosition = fract(position + surroundingDisplacement) - 0.5;
@@ -63,8 +122,7 @@ void getScene(in vec3 position, out Scene scene)
     float cylinderExtent = 2.0;
     scene.mCylinderDistance = cylinderExtent - length(position.xy);
 
-    const float playerRadius = 0.15;
-    scene.mPlayerDistance = length(playerPosition - position) - playerRadius;
+    scene.mPlayerDistance = getPlayerDistance(position);
 
     getClosestObject(position, scene.mClosestObjectId, scene.mClosestObjectDistance);
 }
@@ -159,11 +217,7 @@ void getMaterial(in vec3 position, out vec3 normal, out vec3 albedo, out float r
             metallic = 0;
         }
         else // if (closest == scene.mPlayerDistance)
-        {
-            albedo = vec3(0.71, 0.71, 0.71);
-            roughness = 0.95;
-            metallic = 1;
-        }
+            getPlayerMaterial(position, closest, albedo, roughness, metallic);
     }
     ambientOcclusion = getAmbientOcclusion(position, normal);
 }
