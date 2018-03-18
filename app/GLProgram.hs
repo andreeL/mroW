@@ -10,9 +10,11 @@ module GLProgram
 import Common
 import Control.Exception (catch, ErrorCall)
 import Control.Monad (when, join)
+import qualified Data.ByteString.Lazy as B (readFile, unpack)
 import Data.Foldable (toList)
 import Data.Maybe (fromMaybe)
 import Data.Vector.Generic (convert)
+import qualified Data.Vector.Storable as VS (fromList)
 import FontBuilder (Font, createGUIFont)
 import GHC.Exts (sortWith)
 import Graphics.GL
@@ -24,6 +26,7 @@ import Program (SceneObject(..), SceneState(..), GUIState(..))
 
 sceneProgramSource = ("shaders/Scene.vert", "shaders/Scene.frag") :: (FilePath, FilePath)
 postProcessingProgramSource = ("shaders/GUI.vert", "shaders/GUI.frag") :: (FilePath, FilePath)
+catTextureSource = "data/catTexture.data" :: FilePath
 
 data GLState = GLState {
   _dummyVAO :: GLuint,
@@ -33,7 +36,8 @@ data GLState = GLState {
   _sceneTargetBuffer :: GLuint,
   _sceneProgram :: GLSLProgram,
   _postProcessingProgram :: GLSLProgram,
-  _font :: (Font, GLuint)
+  _font :: (Font, GLuint),
+  _catTexture :: GLuint
 }
 
 createGLState :: Logger -> (Int, Int) -> IO GLState
@@ -49,8 +53,14 @@ createGLState logger (width, height) = do
   logger $ "Font texture size is: " ++ show textureWidth ++ "x" ++ show textureHeight
   fontTextureId <- createFontTexture logger (fromIntegral textureWidth) (fromIntegral textureHeight) (convert textureData)
   let _font = (font, fontTextureId)
+  _catTexture <- loadTexture logger catTextureSource 128 128
   pure GLState{..}
 
+loadTexture :: Logger -> FilePath -> GLsizei -> GLsizei -> IO GLuint
+loadTexture logger textureSource width height = do
+  catTextureData <- B.readFile textureSource
+  createImageTexture logger width height (VS.fromList . B.unpack $ catTextureData)
+  
 reloadShaders :: Logger -> GLState -> IO ()
 reloadShaders logger GLState{..} = catch (do
     recreateGLSLProgram logger _sceneProgram sceneProgramSource
@@ -74,6 +84,9 @@ renderScene logger time sceneState glState@GLState{..} = do
   withFullscreenGLSLProgram logger _dummyVAO _emptyBO _sceneTargetBuffer _sceneTargetSize _sceneProgram $ \programId -> do
     let (V3 pX pY pZ) = _player sceneState
     setFloat logger programId "fTime" Nothing (realToFrac time)
+    glActiveTexture GL_TEXTURE0
+    glBindTexture GL_TEXTURE_2D (_catTexture)
+    setInt logger programId "catTexture" Nothing 0
     setFloat3 logger programId "playerPosition" Nothing (realToFrac pX) (realToFrac pY) (realToFrac pZ)
     let closestObjects = fmap toGLObject $ buildClosestObjectList 100 (_objects sceneState)
     setFloat4Array logger programId "objects" Nothing (fmap realToFrac . concatMap toList $ closestObjects)

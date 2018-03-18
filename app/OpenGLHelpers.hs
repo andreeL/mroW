@@ -20,7 +20,8 @@ module OpenGLHelpers (
     setMatrix33,
     createSceneTargetTexture,
     createSceneTargetBuffer,
-    createFontTexture
+    createFontTexture,
+    createImageTexture
 ) where
 
 import Control.Monad (forM_, when)
@@ -163,6 +164,21 @@ createFontTexture logger width height textureData = do
     glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER (fromIntegral GL_LINEAR)
     return textureId
 
+createImageTexture :: Logger -> GLsizei -> GLsizei -> Vector Word8 -> IO (GLuint)
+createImageTexture logger width height textureData = do
+    glActiveTexture GL_TEXTURE0
+    textureId <- alloca $ \ptr -> glGenVertexArrays 1 ptr >> peek ptr
+    glBindTexture GL_TEXTURE_2D textureId
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_S (fromIntegral GL_REPEAT)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_WRAP_T (fromIntegral GL_REPEAT)
+    unsafeWith textureData $ \bufferPtr -> do
+        CHECK_GL glTexImage2D GL_TEXTURE_2D 0 (fromIntegral GL_RGBA8) width height 0 GL_RGB GL_UNSIGNED_BYTE bufferPtr
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_BASE_LEVEL 0
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAX_LEVEL  0
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MAG_FILTER (fromIntegral GL_LINEAR)
+    glTexParameteri GL_TEXTURE_2D GL_TEXTURE_MIN_FILTER (fromIntegral GL_LINEAR)
+    return textureId
+    
 -- private stuff
 logString :: (Show b) => Logger -> String -> Maybe b -> IO () 
 logString logger info Nothing = logString' logger info

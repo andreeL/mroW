@@ -8,6 +8,8 @@ uniform mat3 eyeRotation;
 uniform vec3 playerPosition;
 uniform vec4[100] objects;
 
+uniform sampler2D catTexture;
+
 const float epsilon = 0.005;
 const float maxDistance = 30.f; // TODO: set this to something sensible
 
@@ -68,44 +70,44 @@ vec3 getRelativeHeadPosition(in vec3 position)
 
 float getPlayerHeadDistance(in vec3 position)
 {
-    vec3 relativeHeadPosition = getRelativeHeadPosition(position);
-    float ear1 = getEllipsoidDistance(relativeHeadPosition + vec3(-0.06, 0.09, 0), vec3(0.03, 0.05, 0.03));
-    float ear2 = getEllipsoidDistance(relativeHeadPosition + vec3(0.06, 0.09, 0), vec3(0.03, 0.05, 0.03));
+    const vec3 relativeHeadPosition = getRelativeHeadPosition(position);
+    const float ear1 = getEllipsoidDistance(relativeHeadPosition + vec3(-0.06, 0.09, 0), vec3(0.03, 0.05, 0.03));
+    const float ear2 = getEllipsoidDistance(relativeHeadPosition + vec3(0.06, 0.09, 0), vec3(0.03, 0.05, 0.03));
     return min(min(ear1, ear2), length(relativeHeadPosition) - 0.1);
 }
 
 float getPlayerDistance(in vec3 position) {
-    vec3 relativePosition = getRelativePlayerPosition(position);
-    float body = getEllipsoidDistance(relativePosition, vec3(0.1, 0.15, 0.1));
-    float arm1 = getEllipsoidDistance(relativePosition + vec3(-0.1, 0.08 + 0.01 * sin(7 * fTime), 0), vec3(0.05, 0.025, 0.025));
-    float arm2 = getEllipsoidDistance(relativePosition + vec3(0.1, 0.08 + 0.01 * sin(8 * fTime), 0), vec3(0.05, 0.025, 0.025));
-    float leg1 = getEllipsoidDistance(relativePosition + vec3(-0.1, -0.08 + 0.01 * sin(10 * fTime), 0), vec3(0.05, 0.025, 0.025));
-    float leg2 = getEllipsoidDistance(relativePosition + vec3(0.1, -0.08 + 0.01 * sin(9 * fTime), 0), vec3(0.05, 0.025, 0.025));
-    float tail = getEllipsoidDistance(relativePosition + vec3(0.0, -0.1, 0), vec3(0.025, 0.2, 0.025));
-    float limbs = min(min(arm1, arm2), min(leg1, leg2));
+    const vec3 relativePosition = getRelativePlayerPosition(position);
+    const float body = getEllipsoidDistance(relativePosition, vec3(0.09, 0.13, 0.09));
+    const float arm1 = getEllipsoidDistance(relativePosition + vec3(-0.1, 0.08 + 0.01 * sin(7 * fTime), 0), vec3(0.05, 0.025, 0.025));
+    const float arm2 = getEllipsoidDistance(relativePosition + vec3(0.1, 0.08 + 0.01 * sin(8 * fTime), 0), vec3(0.05, 0.025, 0.025));
+    const float leg1 = getEllipsoidDistance(relativePosition + vec3(-0.1, -0.08 + 0.01 * sin(10 * fTime), 0), vec3(0.05, 0.025, 0.025));
+    const float leg2 = getEllipsoidDistance(relativePosition + vec3(0.1, -0.08 + 0.01 * sin(9 * fTime), 0), vec3(0.05, 0.025, 0.025));
+    const float tail = getEllipsoidDistance(relativePosition + vec3(0.0, -0.1, 0), vec3(0.025, 0.2, 0.025));
+    const float limbs = min(min(arm1, arm2), min(leg1, leg2));
  
     return min(min(body, getPlayerHeadDistance(position)), min(limbs, tail));
 }
 
 void getPlayerMaterial(in vec3 position, in float closestDistance, out vec3 albedo, out float roughness, out float metallic)
 {
+    vec2 catTextureUV;
     if (closestDistance == getPlayerHeadDistance(position))
     {
-        vec3 relativeHeadPosition = getRelativeHeadPosition(position);
-        vec2 uv = relativeHeadPosition.xy / relativeHeadPosition.z;
-
-        // just some fake albedo for now
-        albedo = vec3(uv, relativeHeadPosition.z > 0 ? 1 : 0) * 0.05 + vec3(0.808125, 0.17609375, 0.04234375);
+        const vec3 relativeHeadPosition = normalize(getRelativeHeadPosition(position));
+        catTextureUV = relativeHeadPosition.xy * 0.25 + 0.25;
+        if (relativeHeadPosition.z > 0)
+            catTextureUV = vec2(1 - catTextureUV.x, catTextureUV.y);
     }
     else
     {
-        vec3 relativePlayerPosition = getRelativePlayerPosition(position);
-        vec2 uv = relativePlayerPosition.xy / relativePlayerPosition.z;
-
-        // just some fake albedo for now
-        albedo = vec3(uv, relativePlayerPosition.z > 0 ? 1 : 0) * 0.05 + vec3(0.808125, 0.17609375, 0.04234375);
+        const vec3 relativePlayerPosition = normalize(getRelativePlayerPosition(position));
+        catTextureUV = relativePlayerPosition.xy * 0.25 + vec2(0.25, 0.75);
+        if (relativePlayerPosition.z > 0)
+            catTextureUV = vec2(1 - catTextureUV.x, catTextureUV.y);
     }
 
+    albedo = texture2D(catTexture, catTextureUV).rgb;
     roughness = 0.95;
     metallic = 0;
 }
