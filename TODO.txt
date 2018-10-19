@@ -1,0 +1,29 @@
+bugs:
+* pause doesn't stop animations
+* sound sometimes causes crashes (no idea what this is about, investigate...)
+
+high:
+* add a more interesting level environment
+ * do some research on what is actually possible
+ * design (should have usable reflections)
+ * impl geometry (distance function)
+ * animations (maybe)
+ * add interesting materials/textures
+
+medium:
+* make a more interesting pickup shape
+* settings screen
+ * resolution
+ * sound volume
+* "static" lights
+* effects when taking pickups
+
+low :
+* improve "Game Over" screen
+* improve main character animations
+* add interesting sound & music
+* FSAA
+* credit screen/intro/end
+* profile and optimize where needed
+ * reduce shader complexity
+* compress fontdata
